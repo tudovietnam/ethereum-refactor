@@ -504,9 +504,9 @@ func (w *worker) mainLoop() {
 				// Special case, if the consensus engine is 0 period clique(dev mode),
 				// submit mining work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
-				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitNewWork(nil, true, time.Now().Unix())
-				}
+				// if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+				w.commitNewWork(nil, true, time.Now().Unix())
+				// }
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
 
