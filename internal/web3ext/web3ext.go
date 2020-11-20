@@ -206,6 +206,31 @@ web3._extend({
 			name: 'stopWS',
 			call: 'admin_stopWS'
 		}),
+        new web3._extend.Method({
+			name: 'addTrustedIP',
+			call: 'admin_addTrustedIP',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'updatePeer',
+			call: 'admin_updatePeer',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'publishNet',
+			call: 'admin_publishNet',
+			params: 5
+		}),
+		new web3._extend.Method({
+			name: 'listPeerByType',
+			call: 'admin_listPeerByType',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'sendCore',
+			call: 'admin_sendCore',
+			params: 2
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -219,6 +244,18 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'datadir',
 			getter: 'admin_datadir'
+		}),
+        new web3._extend.Property({
+			name: 'database',
+			getter: 'admin_databasePeers'
+		}),
+		new web3._extend.Property({
+			name: 'listAccounts',
+			getter: 'admin_listAccounts'
+		}),
+		new web3._extend.Property({
+			name: 'myAccounts',
+			getter: 'admin_myAccounts'
 		}),
 	]
 });
