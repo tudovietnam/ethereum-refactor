@@ -19,7 +19,9 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -34,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -328,4 +331,107 @@ func (b *EthAPIBackend) Miner() *miner.Miner {
 
 func (b *EthAPIBackend) StartMining(threads int) error {
 	return b.eth.StartMining(threads)
+}
+
+func (b *EthAPIBackend) PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{} {
+	log.Info("EthAPI payToRelay", "from", from, "to", to, "json", signedTx)
+	out := make(map[string]interface{})
+	rawTx := []byte(signedTx)
+	tx := types.NewTransaction(0, common.Address{}, nil, 0, nil, nil)
+	if err := tx.UnmarshalJSON(rawTx); err != nil {
+		out["error"] = err.Error()
+		out["cause"] = "Invalid JSON signed Tx"
+		return out
+	}
+	if err := b.SendTx(ctx, tx); err != nil {
+		log.Info("Known tx", "tx", tx.Hash().Hex(), "err", err)
+		out["error"] = err.Error()
+		out["cause"] = "Known Tx"
+		return out
+	}
+	txHash := tx.Hash().Hex()
+	out["txHash"] = txHash
+	out["from"] = from
+	out["to"] = to
+	out["nonce"] = tx.Nonce()
+	out["value"] = tx.Value()
+
+	pollTx := b.PollTransaction(ctx, from, txHash)
+	for k, v := range pollTx {
+		out[k] = v
+	}
+	return out
+}
+
+func (b *EthAPIBackend) PollTransaction(ctx context.Context, from, txHex string) map[string]interface{} {
+	out := make(map[string]interface{})
+	out["fromBal"] = "0"
+	out["toBal"] = "0"
+	out["blockNo"] = "0"
+	out["blockHash"] = "0"
+
+	txHash := common.HexToHash(txHex)
+	for i := 0; i < 20; i++ {
+		log.Info("Poll transaction", "tx", txHash, "loop", i)
+		nTx, blockHash, blockNo, index := rawdb.ReadTransaction(b.eth.ChainDb(), txHash)
+		if nTx == nil {
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		out["blockNo"] = blockNo
+		out["blockHash"] = blockHash.Hex()
+		log.Info("Tx detail", "blockHash", blockHash, "blockNo", blockNo, "index", index)
+
+		if blockNo == 0 {
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		bc := b.eth.BlockChain()
+		header := bc.GetHeaderByNumber(blockNo)
+		if header == nil {
+			out["error"] = fmt.Sprintf("No header found tx %s, blockNo %x, hash %s", txHex, blockNo, blockHash.Hex())
+			return out
+		}
+		stateDb, err := bc.StateAt(header.Root)
+		if err != nil || stateDb == nil {
+			out["error"] = err.Error()
+			return out
+		}
+		var fromAddr common.Address
+		if from == "" {
+			var signer types.Signer = types.FrontierSigner{}
+			if nTx.Protected() {
+				signer = types.NewEIP155Signer(nTx.ChainId())
+			}
+			fromAddr, _ = types.Sender(signer, nTx)
+		} else {
+			fromAddr = common.HexToAddress(from)
+		}
+		out["toBal"] = stateDb.GetBalance(*nTx.To())
+		out["fromBal"] = stateDb.GetBalance(fromAddr)
+		break
+	}
+	return out
+}
+
+func (b *EthAPIBackend) DumpAccounts(ctx context.Context) map[string]interface{} {
+	out := make(map[string]interface{})
+	eth := b.eth
+	bc := eth.BlockChain()
+	latest := bc.CurrentBlock()
+	log.Info("EthAPI dumpAccounts", "latest block", latest)
+
+	if latest == nil {
+		return out
+	}
+	stateDb, err := bc.StateAt(latest.Root())
+	if err == nil {
+		accounts := stateDb.RawDump(true, true, true)
+		out["error"] = "none"
+		out["accounts"] = accounts.Accounts
+	} else {
+		out["error"] = err.Error()
+		out["accounts"] = make([]string, 0)
+	}
+	return out
 }

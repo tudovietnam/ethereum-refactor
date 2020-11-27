@@ -20,6 +20,11 @@ geth:
 all:
 	$(GORUN) build/ci.go install
 
+gw:
+	cd bc-engine/rpc && $(MAKE)
+	$(GORUN) build/ci.go install ./gateway
+	@echo "Done building gateway..."
+
 android:
 	$(GORUN) build/ci.go aar --local
 	@echo "Done building."
@@ -50,6 +55,8 @@ devtools:
 	env GOBIN= go get -u github.com/kevinburke/go-bindata/go-bindata
 	env GOBIN= go get -u github.com/fjl/gencodec
 	env GOBIN= go get -u github.com/golang/protobuf/protoc-gen-go
+	env GOBIN= go get -u github.com/astaxie/beego/
+	env GOBIN= go get -u github.com/beego/bee
 	env GOBIN= go install ./cmd/abigen
 	@type "npm" 2> /dev/null || echo 'Please install node.js and npm'
 	@type "solc" 2> /dev/null || echo 'Please install solc'

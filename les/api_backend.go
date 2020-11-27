@@ -291,3 +291,18 @@ func (b *LesApiBackend) Engine() consensus.Engine {
 func (b *LesApiBackend) CurrentHeader() *types.Header {
 	return b.eth.blockchain.CurrentHeader()
 }
+
+func (s *LesApiBackend) DumpAccounts(ctx context.Context) map[string]interface{} {
+	out := make(map[string]interface{})
+	return out
+}
+
+func (s *LesApiBackend) PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{} {
+	out := make(map[string]interface{})
+	return out
+}
+
+func (s *LesApiBackend) PollTransaction(ctx context.Context, from, txHex string) map[string]interface{} {
+	out := make(map[string]interface{})
+	return out
+}

@@ -88,6 +88,10 @@ type Backend interface {
 
 	ChainConfig() *params.ChainConfig
 	Engine() consensus.Engine
+
+	DumpAccounts(ctx context.Context) map[string]interface{}
+	PollTransaction(ctx context.Context, from, txHex string) map[string]interface{}
+	PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{}
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

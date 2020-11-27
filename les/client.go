@@ -18,6 +18,7 @@
 package les
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -317,4 +318,14 @@ func (s *LightEthereum) Stop() error {
 	s.wg.Wait()
 	log.Info("Light ethereum stopped")
 	return nil
+}
+
+func (s *LightEthereum) DumpAccounts(ctx context.Context) map[string]interface{} {
+	out := make(map[string]interface{})
+	return out
+}
+
+func (s *LightEthereum) PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{} {
+	out := make(map[string]interface{})
+	return out
 }

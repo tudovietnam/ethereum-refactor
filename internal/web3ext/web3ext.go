@@ -211,26 +211,6 @@ web3._extend({
 			call: 'admin_addTrustedIP',
 			params: 1
 		}),
-		new web3._extend.Method({
-			name: 'updatePeer',
-			call: 'admin_updatePeer',
-			params: 1
-		}),
-		new web3._extend.Method({
-			name: 'publishNet',
-			call: 'admin_publishNet',
-			params: 5
-		}),
-		new web3._extend.Method({
-			name: 'listPeerByType',
-			call: 'admin_listPeerByType',
-			params: 1
-		}),
-		new web3._extend.Method({
-			name: 'sendCore',
-			call: 'admin_sendCore',
-			params: 2
-		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -244,18 +224,6 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'datadir',
 			getter: 'admin_datadir'
-		}),
-        new web3._extend.Property({
-			name: 'database',
-			getter: 'admin_databasePeers'
-		}),
-		new web3._extend.Property({
-			name: 'listAccounts',
-			getter: 'admin_listAccounts'
-		}),
-		new web3._extend.Property({
-			name: 'myAccounts',
-			getter: 'admin_myAccounts'
 		}),
 	]
 });
@@ -599,6 +567,23 @@ web3._extend({
 			call: 'eth_getProof',
 			params: 3,
 			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null, web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'payToRelay',
+			call: 'eth_payToRelay',
+			params: 3,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputAddressFormatter, null]
+		}),
+		new web3._extend.Method({
+			name: 'dumpAccounts',
+			call: 'eth_dumpAccounts',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: "pollTransaction",
+			call: "eth_pollTransaction",
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputTransactionFormatter]
 		}),
 	],
 	properties: [
