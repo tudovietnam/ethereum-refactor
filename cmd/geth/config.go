@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"unicode"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/naoina/toml"
 )
@@ -83,11 +86,20 @@ type whisperDeprecatedConfig struct {
 	RestrictConnectionBetweenLightClients bool    `toml:",omitempty"`
 }
 
+type sharedConfig struct {
+	GcMode         string           `toml:",omitempty"`
+	TrustedNodes   []*enode.Node    `toml:",omitempty"`
+	StaticNodes    []*enode.Node    `toml:",omitempty"`
+	BootstrapNodes []*enode.Node    `toml:",omitempty"`
+	NetRestrict    *netutil.Netlist `toml:",omitempty"`
+}
+
 type gethConfig struct {
 	Eth      eth.Config
 	Shh      whisperDeprecatedConfig
 	Node     node.Config
 	Ethstats ethstatsConfig
+	ShareCfg string `toml:",omitempty"`
 }
 
 func loadConfig(file string, cfg *gethConfig) error {
@@ -102,7 +114,34 @@ func loadConfig(file string, cfg *gethConfig) error {
 	if _, ok := err.(*toml.LineError); ok {
 		err = errors.New(file + ", " + err.Error())
 	}
+	if cfg.ShareCfg != "" {
+		return parseSharedConfig(file, cfg)
+	}
 	return err
+}
+
+func parseSharedConfig(mainCfg string, cfg *gethConfig) error {
+	f, err := os.Open(filepath.Join(filepath.Dir(mainCfg), cfg.ShareCfg))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+	defer f.Close()
+
+	var shareCfg sharedConfig
+	err = tomlSettings.NewDecoder(bufio.NewReader(f)).Decode(&shareCfg)
+	if _, ok := err.(*toml.LineError); ok {
+		return errors.New(cfg.ShareCfg + ", " + err.Error())
+	}
+	p2p := &cfg.Node.P2P
+	eth := &cfg.Eth
+	eth.NoPruning = shareCfg.GcMode == "archive"
+	p2p.BootstrapNodes = append(p2p.BootstrapNodes, shareCfg.BootstrapNodes...)
+	p2p.TrustedNodes = append(p2p.TrustedNodes, shareCfg.TrustedNodes...)
+	p2p.StaticNodes = append(p2p.StaticNodes, shareCfg.StaticNodes...)
+
+	log.Info("Set from common config", "GC mode", eth.NoPruning)
+	return nil
 }
 
 func defaultNodeConfig() node.Config {

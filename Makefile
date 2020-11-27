@@ -20,7 +20,17 @@ geth:
 all:
 	$(GORUN) build/ci.go install
 
+td:
+	$(GORUN) build/ci.go install ./tudo
+	@echo "Done building tudo..."
+
+tdtest:
+	cd tudo/proxy && go test
+	cd tudo/mobile && go test
+
 android:
+	rm build/bin/gomobile; ln -s $$HOME/go/bin/gomobile build/bin
+	rm build/bin/gobind; ln -s $$HOME/go/bin/gobind build/bin
 	$(GORUN) build/ci.go aar --local
 	@echo "Done building."
 	@echo "Import \"$(GOBIN)/geth.aar\" to use the library."
@@ -50,6 +60,8 @@ devtools:
 	env GOBIN= go get -u github.com/kevinburke/go-bindata/go-bindata
 	env GOBIN= go get -u github.com/fjl/gencodec
 	env GOBIN= go get -u github.com/golang/protobuf/protoc-gen-go
+	env GOBIN= go get -u github.com/astaxie/beego/
+	env GOBIN= go get -u github.com/beego/bee
 	env GOBIN= go install ./cmd/abigen
 	@type "npm" 2> /dev/null || echo 'Please install node.js and npm'
 	@type "solc" 2> /dev/null || echo 'Please install solc'

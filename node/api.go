@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/debug"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -106,6 +107,11 @@ func (api *privateAdminAPI) AddTrustedPeer(url string) (bool, error) {
 	}
 	server.AddTrustedPeer(node)
 	return true, nil
+}
+
+func (api *privateAdminAPI) AddTrustedIP(cidr string) ([]string, error) {
+	log.Info("Add trusted CIDR", "cidr", cidr)
+	return nil, nil
 }
 
 // RemoveTrustedPeer removes a remote node from the trusted peer set, but it

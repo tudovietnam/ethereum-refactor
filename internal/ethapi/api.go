@@ -1952,3 +1952,26 @@ func toHexSlice(b [][]byte) []string {
 	}
 	return r
 }
+
+// PayToRelay relay signed transaction in json string.
+//
+func (s *PublicBlockChainAPI) PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{} {
+	log.Debug("Relay tx", "from", from, "to", to, "json", signedTx)
+	return s.b.PayToRelay(ctx, from, to, signedTx)
+}
+
+func (s *PublicBlockChainAPI) DumpAccounts(ctx context.Context) map[string]interface{} {
+	return s.b.DumpAccounts(ctx)
+}
+
+func (s *PublicBlockChainAPI) PollTransaction(ctx context.Context, from, txHex string) map[string]interface{} {
+	return s.b.PollTransaction(ctx, from, txHex)
+}
+
+func (s *PublicBlockChainAPI) ListTransactions(ctx context.Context, txs []string) map[string]interface{} {
+	return s.b.ListTransactions(ctx, txs)
+}
+
+func (s *PublicBlockChainAPI) ListAccounts(ctx context.Context, accounts []string) map[string]interface{} {
+	return s.b.ListAccounts(ctx, accounts)
+}
