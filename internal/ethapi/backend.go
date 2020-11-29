@@ -92,6 +92,8 @@ type Backend interface {
 	DumpAccounts(ctx context.Context) map[string]interface{}
 	PollTransaction(ctx context.Context, from, txHex string) map[string]interface{}
 	PayToRelay(ctx context.Context, from, to, signedTx string) map[string]interface{}
+	ListTransactions(ctx context.Context, trans []string) map[string]interface{}
+	ListAccounts(ctx context.Context, accounts []string) map[string]interface{}
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

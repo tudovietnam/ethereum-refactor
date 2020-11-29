@@ -580,10 +580,20 @@ web3._extend({
 			params: 0
 		}),
 		new web3._extend.Method({
+			name: 'listTransactions',
+			call: 'eth_listTransactions',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'listAccounts',
+			call: 'eth_listAccounts',
+			params: 1
+		}),
+		new web3._extend.Method({
 			name: "pollTransaction",
 			call: "eth_pollTransaction",
 			params: 2,
-			inputFormatter: [web3._extend.formatters.inputAddressFormatter, web3._extend.formatters.inputTransactionFormatter]
+			inputFormatter: [null, web3._extend.formatters.inputTransactionFormatter]
 		}),
 	],
 	properties: [

@@ -25,6 +25,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -364,38 +366,105 @@ func (b *EthAPIBackend) PayToRelay(ctx context.Context, from, to, signedTx strin
 }
 
 func (b *EthAPIBackend) PollTransaction(ctx context.Context, from, txHex string) map[string]interface{} {
-	out := make(map[string]interface{})
-	out["fromBal"] = "0"
-	out["toBal"] = "0"
-	out["blockNo"] = "0"
-	out["blockHash"] = "0"
+	out, _ := b.getTransDetail(ctx, from, txHex, true)
+	return out
+}
 
+func (b *EthAPIBackend) ListTransactions(ctx context.Context, trans []string) map[string]interface{} {
+	type transout struct {
+		From             string
+		To               string
+		BlockHash        string
+		BlockNumber      uint64
+		Gas              hexutil.Uint64
+		GasPrice         *big.Int
+		Hash             string
+		Input            hexutil.Bytes
+		Nonce            hexutil.Uint64
+		Value            *big.Int
+		V                *big.Int
+		R                *big.Int
+		S                *big.Int
+		ToBalance        *big.Int
+		FromBalance      *big.Int
+		TransactionIndex uint64
+		Time             uint64
+	}
+	txOut := make([]transout, 0)
+	err := make([]string, 0)
+	out := make(map[string]interface{})
+
+	for _, txHash := range trans {
+		res, tx := b.getTransDetail(ctx, "", txHash, false)
+		if tx != nil {
+			v, r, s := tx.RawSignatureValues()
+			txOut = append(txOut, transout{
+				From:             res["from"].(string),
+				To:               res["to"].(string),
+				BlockHash:        res["blockHash"].(string),
+				BlockNumber:      res["blockNo"].(uint64),
+				Gas:              hexutil.Uint64(tx.Gas()),
+				GasPrice:         tx.GasPrice(),
+				Hash:             txHash,
+				Input:            hexutil.Bytes(tx.Data()),
+				Nonce:            hexutil.Uint64(tx.Nonce()),
+				Value:            tx.Value(),
+				V:                v,
+				R:                r,
+				S:                s,
+				ToBalance:        res["toBal"].(*big.Int),
+				FromBalance:      res["fromBal"].(*big.Int),
+				TransactionIndex: res["index"].(uint64),
+				Time:             res["time"].(uint64),
+			})
+		} else if res["error"] != nil {
+			err = append(err, res["error"].(string))
+		}
+	}
+	out["error"] = err
+	out["trans"] = txOut
+	return out
+}
+
+func (b *EthAPIBackend) getTransDetail(ctx context.Context, from, txHex string, poll bool) (map[string]interface{}, *types.Transaction) {
+	var pollLoop int = 1
+	if poll {
+		pollLoop = 20
+	}
 	txHash := common.HexToHash(txHex)
-	for i := 0; i < 20; i++ {
-		log.Info("Poll transaction", "tx", txHash, "loop", i)
+	out := make(map[string]interface{})
+	out["to"] = ""
+	out["from"] = from
+	out["fromBal"] = math.ZERO
+	out["toBal"] = math.ZERO
+	out["blockNo"] = uint64(0)
+	out["time"] = uint64(0)
+	out["blockHash"] = "0x0"
+
+	for i := 0; i < pollLoop; i++ {
 		nTx, blockHash, blockNo, index := rawdb.ReadTransaction(b.eth.ChainDb(), txHash)
-		if nTx == nil {
+		if nTx == nil || blockNo == 0 {
+			if out["error"] == nil {
+				out["error"] = fmt.Sprintf("%s: can't find transaction", txHex)
+			}
 			time.Sleep(300 * time.Millisecond)
 			continue
 		}
+		out["error"] = nil
+		out["index"] = index
 		out["blockNo"] = blockNo
 		out["blockHash"] = blockHash.Hex()
-		log.Info("Tx detail", "blockHash", blockHash, "blockNo", blockNo, "index", index)
 
-		if blockNo == 0 {
-			time.Sleep(300 * time.Millisecond)
-			continue
-		}
 		bc := b.eth.BlockChain()
 		header := bc.GetHeaderByNumber(blockNo)
 		if header == nil {
-			out["error"] = fmt.Sprintf("No header found tx %s, blockNo %x, hash %s", txHex, blockNo, blockHash.Hex())
-			return out
+			out["error"] = fmt.Sprintf("%s: no header, block [%x, %s]", txHex, blockNo, blockHash.Hex())
+			return out, nil
 		}
 		stateDb, err := bc.StateAt(header.Root)
 		if err != nil || stateDb == nil {
-			out["error"] = err.Error()
-			return out
+			out["error"] = fmt.Sprintf("%s: %s", txHex, err.Error())
+			return out, nil
 		}
 		var fromAddr common.Address
 		if from == "" {
@@ -407,10 +476,47 @@ func (b *EthAPIBackend) PollTransaction(ctx context.Context, from, txHex string)
 		} else {
 			fromAddr = common.HexToAddress(from)
 		}
+		out["to"] = nTx.To().Hex()
+		out["from"] = fromAddr.Hex()
 		out["toBal"] = stateDb.GetBalance(*nTx.To())
 		out["fromBal"] = stateDb.GetBalance(fromAddr)
-		break
+		out["time"] = header.Time
+		return out, nTx
 	}
+	return out, nil
+}
+
+func (b *EthAPIBackend) ListAccounts(ctx context.Context, accounts []string) map[string]interface{} {
+	type accountInfo struct {
+		Account   string
+		Type      string
+		XuBalance uint64
+		Nonce     uint64
+		BlockNo   uint64
+	}
+	result := make([]accountInfo, 0)
+	out := make(map[string]interface{})
+	out["accounts"] = result
+	netID := fmt.Sprintf("%x", b.eth.NetVersion())
+
+	state, header, err := b.StateAndHeaderByNumber(ctx, -1)
+	if err != nil || header == nil || state == nil {
+		out["error"] = fmt.Sprintf("Unable to get current block, try again")
+		return out
+	}
+	blkNo := uint64(header.Number.Int64())
+	for _, addr := range accounts {
+		actKey := common.HexToAddress(addr)
+		balance := state.GetBalance(actKey)
+		result = append(result, accountInfo{
+			Account:   addr,
+			Type:      netID,
+			XuBalance: uint64(math.FromWeiToXu(balance)),
+			Nonce:     state.GetNonce(actKey),
+			BlockNo:   blkNo,
+		})
+	}
+	out["accounts"] = result
 	return out
 }
 
