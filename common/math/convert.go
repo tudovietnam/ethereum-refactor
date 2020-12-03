@@ -69,10 +69,10 @@ func FromWeiNum(num *big.Int, unit *UnitConv) *big.Int {
 	return ToWeiNum(num, unit)
 }
 
-func FromWeiToXu(wei *big.Int) int64 {
-	return new(big.Int).Div(wei, XU.Factor).Int64()
+func FromWeiToXu(wei *big.Int) uint64 {
+	return uint64(new(big.Int).Div(wei, XU.Factor).Int64())
 }
 
-func FromWeiToHao(wei *big.Int) int64 {
-	return new(big.Int).Div(wei, HAO.Factor).Int64()
+func FromWeiToHao(wei *big.Int) uint64 {
+	return uint64(new(big.Int).Div(wei, HAO.Factor).Int64())
 }
