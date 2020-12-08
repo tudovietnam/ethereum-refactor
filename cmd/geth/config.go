@@ -89,6 +89,7 @@ type whisperDeprecatedConfig struct {
 type sharedConfig struct {
 	GcMode         string           `toml:",omitempty"`
 	TrustedNodes   []*enode.Node    `toml:",omitempty"`
+	StaticNodes    []*enode.Node    `toml:",omitempty"`
 	BootstrapNodes []*enode.Node    `toml:",omitempty"`
 	NetRestrict    *netutil.Netlist `toml:",omitempty"`
 }
@@ -137,6 +138,7 @@ func parseSharedConfig(mainCfg string, cfg *gethConfig) error {
 	eth.NoPruning = shareCfg.GcMode == "archive"
 	p2p.BootstrapNodes = append(p2p.BootstrapNodes, shareCfg.BootstrapNodes...)
 	p2p.TrustedNodes = append(p2p.TrustedNodes, shareCfg.TrustedNodes...)
+	p2p.StaticNodes = append(p2p.StaticNodes, shareCfg.StaticNodes...)
 
 	log.Info("Set from common config", "GC mode", eth.NoPruning)
 	return nil

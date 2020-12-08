@@ -20,10 +20,9 @@ geth:
 all:
 	$(GORUN) build/ci.go install
 
-gw:
-	cd bc-engine/rpc && $(MAKE)
-	$(GORUN) build/ci.go install ./gateway
-	@echo "Done building gateway..."
+td:
+	$(GORUN) build/ci.go install ./tudo
+	@echo "Done building tudo..."
 
 android:
 	$(GORUN) build/ci.go aar --local
