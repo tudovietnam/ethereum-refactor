@@ -6,7 +6,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -18,15 +17,30 @@ import (
 )
 
 type TdNodeApi struct {
-	Lock sync.Mutex
+	config *TdConfig
+	kstore *kstore.TdStore
+	stop   chan struct{}
 }
 
-func newTdNodeApi() *TdNodeApi {
-	api := &TdNodeApi{}
-	return api
+func newTdNodeApi(conf *TdConfig, stop chan struct{}) *TdNodeApi {
+	return &TdNodeApi{
+		config: conf,
+		stop:   stop,
+		kstore: kstore.NewTdStore(conf.KeyStoreDir),
+	}
 }
 
-func (api *TdNodeApi) EnableService() {
+func (api *TdNodeApi) Start() error {
+	log.Info("Start API service")
+	return api.kstore.Load()
+}
+
+func (api *TdNodeApi) Stop() {
+}
+
+func (api *TdNodeApi) EnableService() error {
+	log.Info("Enable API service")
+	return nil
 }
 
 // NewWalletEntry creates a new wallet entry.
@@ -38,7 +52,9 @@ func (api *TdNodeApi) NewWalletEntry(acct, grp string,
 	if account == nil {
 		return nil, errors.New(fmt.Sprintf("Invalid address %s", acct))
 	}
-	return nil, nil
+	entry := kstore.NewWalletEntry(account)
+	entry.Update(grp, pub, priv, contact, desc)
+	return entry, api.PersistEntry(entry)
 }
 
 // UpdateWalletEntry updates existing entry with new data.
@@ -53,7 +69,7 @@ func (api *TdNodeApi) UpdateWalletEntry(acct, grp string,
 	return nil, nil
 }
 
-func (api *TdNodeApi) PersistEntryCall(entry *kstore.WalletEntry) error {
+func (api *TdNodeApi) PersistEntry(entry *kstore.WalletEntry) error {
 	return nil
 }
 

@@ -91,15 +91,15 @@ func NewMobileApp() *MobileApp {
 }
 
 func (m *MobileApp) Stop() {
-	m.app.Stop()
+	m.Stop()
 }
 
 func (m *MobileApp) Pause() {
-	m.app.Stop()
+	m.Pause()
 }
 
 func (m *MobileApp) Resume() {
-	m.app.Start()
+	m.Resume()
 }
 
 func (m *MobileApp) MobileRun(base, level, config string) {

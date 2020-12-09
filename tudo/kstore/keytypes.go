@@ -8,8 +8,6 @@ package kstore
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -59,7 +57,6 @@ type WalletEntryOps interface {
 
 type WalletEntry struct {
 	Account     *accounts.Account `json:"-"`
-	ops         WalletEntryOps    `json:"-"`
 	ETag        string            `json:"-"`
 	JsonAcct    string            `json:"account"`
 	GroupName   string            `json:"groupName"`
@@ -67,6 +64,29 @@ type WalletEntry struct {
 	PrivateName string            `json:"privateName"`
 	ContactInfo string            `json:"contactInfo"`
 	Description string            `json:"description"`
+}
+
+func NewWalletEntry(account *accounts.Account) *WalletEntry {
+	var strAcct string = ""
+	if account != nil {
+		strAcct = account.Address.Hex()
+	}
+	entry := &WalletEntry{
+		Account:  account,
+		JsonAcct: strAcct,
+	}
+	return entry
+}
+
+func (we *WalletEntry) Copy(that *WalletEntry) {
+	we.Account = that.Account
+	we.ETag = that.ETag
+	we.JsonAcct = that.JsonAcct
+	we.GroupName = that.GroupName
+	we.PublicName = that.PublicName
+	we.PrivateName = that.PrivateName
+	we.ContactInfo = that.ContactInfo
+	we.Description = that.Description
 }
 
 // Account from wallet entry with optional private key.
@@ -81,6 +101,29 @@ type AccountEntry struct {
 	Contract   uint64
 }
 
+func NewAccountEntry(key *keystore.Key,
+	we *WalletEntry, auth string, contract uint64) *AccountEntry {
+
+	var ae *AccountEntry = nil
+	if we != nil {
+		ae = &AccountEntry{
+			Key:         key,
+			Contract:    contract,
+			WalletEntry: *we,
+		}
+	} else {
+		ae = &AccountEntry{
+			Key:      key,
+			Contract: contract,
+		}
+	}
+	if err := ae.Encrypt(auth); err != nil {
+		log.Error("Failed to encrypt key", "error", err)
+		return nil
+	}
+	return ae
+}
+
 func (ae *AccountEntry) GetBalance() uint64 { return ae.Balance }
 func (ae *AccountEntry) GetNonce() uint64   { return ae.Nonce }
 func (ae *AccountEntry) ClearKey() {
@@ -90,6 +133,10 @@ func (ae *AccountEntry) ClearKey() {
 		key.Y.SetInt64(0)
 		key.D.SetInt64(0)
 	}
+}
+
+func (ae *AccountEntry) IsContract() bool {
+	return ae.Contract == ContractNonce
 }
 
 // Serializes AccountEntry to JSON to save to persistent storage.
@@ -102,51 +149,6 @@ type AccountEntryJson struct {
 type StockEntryJson struct {
 	AccountEntryJson
 	ContractNonce uint64 `json:"nonce"`
-}
-
-type Wallet struct {
-	accounts map[string]*AccountEntry
-	recPath  string
-	Mu       sync.Mutex
-}
-
-// NewWallet allocates base wallet.
-//
-func NewWallet(scryptN, scryptP int, path string) *Wallet {
-	wallet := &Wallet{
-		accounts: make(map[string]*AccountEntry),
-		recPath:  path,
-	}
-	return wallet
-}
-
-func (w *Wallet) AccountMap() map[string]*AccountEntry { return w.accounts }
-func (w *Wallet) Save() error                          { return errors.New("Base wallet save") }
-func (w *Wallet) Load() error                          { return errors.New("Base wallet load") }
-
-// Factory to create wallet account entries.
-//
-func (w *Wallet) NewAccountEntry(key *keystore.Key,
-	we *WalletEntry, auth string, contract bool) *AccountEntry {
-	return NewAccountEntry(key, we, auth, contract)
-}
-
-func NewAccountEntry(key *keystore.Key, we *WalletEntry,
-	auth string, contract bool) *AccountEntry {
-
-	entry := newFsAccountEntry(key, we, auth)
-	if err := entry.Encrypt(auth); err != nil {
-		log.Error("Failed to encrypt key", "error", err)
-		return nil
-	}
-	if contract == true {
-		entry.Contract = ContractNonce
-	}
-	return entry
-}
-
-func (w *Wallet) NewWalletEntry(acct *accounts.Account) *WalletEntry {
-	return newFsWalletEntry(acct)
 }
 
 // GetAddress returns address from hex string.
@@ -173,19 +175,4 @@ func GetAccount(acct string) (*accounts.Account, error) {
 		return &accounts.Account{Address: *addr}, nil
 	}
 	return nil, err
-}
-
-func (we *WalletEntry) Copy(that *WalletEntry) {
-	we.Account = that.Account
-	we.ETag = that.ETag
-	we.JsonAcct = that.JsonAcct
-	we.GroupName = that.GroupName
-	we.PublicName = that.PublicName
-	we.PrivateName = that.PrivateName
-	we.ContactInfo = that.ContactInfo
-	we.Description = that.Description
-}
-
-func (ae *AccountEntry) IsContract() bool {
-	return ae.Contract == ContractNonce
 }
