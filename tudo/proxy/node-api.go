@@ -5,12 +5,8 @@ package proxy
 
 import (
 	"errors"
-	"fmt"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/tudo/kstore"
@@ -40,7 +36,7 @@ func (api *TdNodeApi) Stop() {
 
 func (api *TdNodeApi) EnableService() error {
 	log.Info("Enable API service")
-	return nil
+	return api.kstore.EnableService()
 }
 
 // NewWalletEntry creates a new wallet entry.
@@ -48,13 +44,13 @@ func (api *TdNodeApi) EnableService() error {
 func (api *TdNodeApi) NewWalletEntry(acct, grp string,
 	pub, priv, contact, desc string) (*kstore.WalletEntry, error) {
 
-	account := kstore.AddrStrToAccount(acct)
-	if account == nil {
-		return nil, errors.New(fmt.Sprintf("Invalid address %s", acct))
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid address")
 	}
 	entry := kstore.NewWalletEntry(account)
 	entry.Update(grp, pub, priv, contact, desc)
-	return entry, api.PersistEntry(entry)
+	return entry, api.kstore.PersistEntry(entry)
 }
 
 // UpdateWalletEntry updates existing entry with new data.
@@ -62,128 +58,146 @@ func (api *TdNodeApi) NewWalletEntry(acct, grp string,
 func (api *TdNodeApi) UpdateWalletEntry(acct, grp string,
 	pub, priv, contact, desc string) (*kstore.WalletEntry, error) {
 
-	account := kstore.AddrStrToAccount(acct)
-	if account == nil {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
 		return nil, errors.New("Invalid address")
 	}
-	return nil, nil
+	return api.kstore.UpdateWalletEntry(account, grp, pub, priv, contact, desc)
 }
 
 func (api *TdNodeApi) PersistEntry(entry *kstore.WalletEntry) error {
-	return nil
+	return api.kstore.PersistEntry(entry)
 }
 
 // DeleteEntry removes wallet entry based on account.
 //
 func (api *TdNodeApi) DeleteEntry(acct string) error {
-	account := kstore.AddrStrToAccount(acct)
-	if account == nil {
-		return errors.New(fmt.Sprintf("Invalid address %s", acct))
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return errors.New("Invalid address")
 	}
-	return nil
+	return api.kstore.DeleteEntry(account)
 }
 
 func (api *TdNodeApi) DeleteAccount(addr, auth string) error {
-	if !common.IsHexAddress(addr) {
-		return errors.New("Invalid address")
+	account, err := kstore.GetAccount(addr)
+	if account == nil || err != nil {
+		return errors.New("Invalid account address")
 	}
-	return nil
+	return api.kstore.DeleteAccount(account, auth)
 }
 
-func (api *TdNodeApi) DeleteEntryCall(entry *kstore.WalletEntry) error {
-	return nil
-}
-
-// GetAccount returns the account matching address, without private key info.
 //
-func (api *TdNodeApi) GetAccount(acct *accounts.Account) (*kstore.AccountEntry, error) {
-	return nil, nil
+func (api *TdNodeApi) GetAccount(acct string) (*kstore.AccountEntry, error) {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid account address")
+	}
+	return api.kstore.GetAccount(account)
 }
 
-// PayToRelay returns relay signed transaction.
-//
-func (api *TdNodeApi) PayToRelay(from, to *accounts.Account,
-	auth string, xuAmt, chainId uint64) (*RelaySignedTx, error) {
+func (api *TdNodeApi) PayToRelayNonce(from, to, auth string,
+	xuAmt, nonce, chainId uint64) (*RelaySignedTx, error) {
 
+	fromAcct, err := kstore.GetAccount(from)
+	if fromAcct == nil || err != nil {
+		return nil, errors.New("Invalid from account address")
+	}
+	toAcct, err := kstore.GetAccount(to)
+	if toAcct == nil || err != nil {
+		return nil, errors.New("Invalid to account address")
+	}
+	signedTx, err := api.kstore.PayToRelayNonce(fromAcct, toAcct, auth, xuAmt, nonce, chainId)
 	return &RelaySignedTx{
-		From:     from.Address.Hex(),
-		To:       to.Address.Hex(),
-		SignedTx: types.Transaction{},
-		// SignedTx: *signedTx,
-	}, nil
-}
-
-func (api *TdNodeApi) PayToRelayNonce(from, to *accounts.Account,
-	auth string, xuAmt, nonce, chainId uint64) (*RelaySignedTx, error) {
-
-	return &RelaySignedTx{
-		From:     from.Address.Hex(),
-		To:       to.Address.Hex(),
-		SignedTx: types.Transaction{},
-		// SignedTx: *signedTx,
-	}, nil
+		From:     fromAcct.Address.Hex(),
+		To:       toAcct.Address.Hex(),
+		SignedTx: *signedTx,
+	}, err
 }
 
 // CreateAccount creates a new account.
 //
 func (api *TdNodeApi) CreatAccount(pubName, privName,
 	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
-	log.Info("Create account", "privName", privName, "pubName", pubName)
 
-	return nil, nil
+	log.Info("Create account", "privName", privName, "pubName", pubName)
+	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, false)
 }
 
 // CreateStock creates a new account with stock contract.
 //
 func (api *TdNodeApi) CreatStock(pubName, privName,
 	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
+
 	log.Info("Create stock account", "privName", privName, "pubName", pubName)
-	return nil, nil
+	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, true)
 }
 
 // UpdateAccount updates existing account.
 //
 func (api *TdNodeApi) UpdateAccount(address, pubName, privName,
-	groupName, contact, desc, auth string) (*kstore.AccountEntry, error) {
+	groupName, contact, desc, oldAuth, newAuth string) (*kstore.AccountEntry, error) {
+
 	log.Info("Update account", "address", address, "pubName", pubName)
-	return nil, nil
+	account, err := kstore.GetAccount(address)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid account address")
+	}
+	return api.kstore.UpdateAccount(account, pubName,
+		privName, groupName, contact, desc, oldAuth, newAuth)
 }
 
 // ImportAccount imports external account.
 //
 func (api *TdNodeApi) ImportAccount(pKey, pubName, privName,
-	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
+	groupName, contact, desc, auth string, stock bool) (*kstore.WalletEntry, error) {
 
 	privKey, err := crypto.HexToECDSA(pKey)
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Priv key", "key", privKey)
-	return nil, nil
+	log.Debug("Priv key", "key", privKey)
+	return api.kstore.ImportAccount(privKey, pubName,
+		privName, groupName, contact, desc, auth, stock)
 }
 
 // GetAllAccounts returns all accounts in the store.
 //
 func (api *TdNodeApi) GetAllAccounts() ([]kstore.AccountEntry, error) {
-	return nil, nil
+	return api.kstore.GetAllAccounts()
+}
+
+func (api *TdNodeApi) GetAddressBook() ([]kstore.WalletEntry, error) {
+	return api.kstore.GetAddressBook()
 }
 
 // OpenAccount decrypts the key, open the account to send payment.
 //
-func (api *TdNodeApi) OpenAccount(acct *accounts.Account, auth string) (*keystore.Key, error) {
-	log.Info("Lock account", "account", acct.Address.Hex())
-
-	return nil, nil
+func (api *TdNodeApi) OpenAccount(acct, auth string) (*keystore.Key, error) {
+	log.Info("Lock account", "account", acct)
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid account address")
+	}
+	return api.kstore.OpenAccount(account, auth)
 }
 
 // CloseAccount encrypts the key.
 //
-func (api *TdNodeApi) CloseAccount(acct *accounts.Account) error {
-	return nil
+func (api *TdNodeApi) CloseAccount(acct string) error {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return errors.New("Invalid account address")
+	}
+	return api.kstore.CloseAccount(account)
 }
 
 // DeleteAccountKey removes private key from account record.
 //
-func (api *TdNodeApi) DeleteAccountKey(acct *accounts.Account) error {
-	return nil
+func (api *TdNodeApi) DeleteAccountKey(acct string) error {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return errors.New("Invalid account address")
+	}
+	return api.kstore.DeleteAccountKey(account)
 }

@@ -4,11 +4,14 @@
 package mobile
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/tudo/kstore"
 	"github.com/ethereum/go-ethereum/tudo/proxy"
@@ -181,20 +184,19 @@ func fromAccountEntry(a *kstore.AccountEntry) *AccountEntry {
 // GetAddressBook returns all addressbook entries.
 //
 func (m *MobileApp) GetAddressBook(out *AccountEntryArr) {
-	/*
-		api := m.app.GetApi()
-		entries := api.EntryByGroup("")
-		for idx, _ := range entries {
-			out.Array = append(out.Array, fromWalletEntry(entries[idx]))
-		}
-	*/
+	api := m.app.GetApi()
+	entries, err := api.GetAddressBook()
+	if err != nil {
+		return
+	}
+	for idx, _ := range entries {
+		out.Array = append(out.Array, fromWalletEntry(&entries[idx]))
+	}
 }
 
 // CreatAccount creates a new account.
 //
-func (m *MobileApp) CreatAccount(pub, priv string,
-	gr, ct, desc, auth string) (*AccountEntry, error) {
-
+func (m *MobileApp) CreatAccount(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
 	api := m.app.GetApi()
 	entry, err := api.CreatAccount(pub, priv, gr, ct, desc, auth)
 	if err != nil {
@@ -203,8 +205,7 @@ func (m *MobileApp) CreatAccount(pub, priv string,
 	return fromWalletEntry(entry), nil
 }
 
-func (m *MobileApp) CreatStock(pub, priv string,
-	gr, ct, desc, auth string) (*AccountEntry, error) {
+func (m *MobileApp) CreatStock(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
 
 	api := m.app.GetApi()
 	entry, err := api.CreatStock(pub, priv, gr, ct, desc, auth)
@@ -215,19 +216,22 @@ func (m *MobileApp) CreatStock(pub, priv string,
 }
 
 func (m *MobileApp) UpdateAccount(address, pub, priv string,
-	gr, ct, desc, auth string) (*AccountEntry, error) {
+	gr, ct, desc, oldAuth, newAuth string) (*AccountEntry, error) {
 	api := m.app.GetApi()
-	entry, err := api.UpdateAccount(address, pub, priv, gr, ct, desc, auth)
+	entry, err := api.UpdateAccount(address, pub, priv, gr, ct, desc, oldAuth, newAuth)
+	if err != nil {
+		return nil, err
+	}
 	return fromAccountEntry(entry), err
 }
 
 // ImportAccount imports full account info to the wallet.
 //
 func (m *MobileApp) ImportAccount(pkey string,
-	pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
+	pub, priv, gr, ct, desc, auth string, stock bool) (*AccountEntry, error) {
 
 	api := m.app.GetApi()
-	entry, err := api.ImportAccount(pkey, pub, priv, gr, ct, desc, auth)
+	entry, err := api.ImportAccount(pkey, pub, priv, gr, ct, desc, auth, stock)
 	if err != nil {
 		return nil, err
 	}
@@ -236,41 +240,41 @@ func (m *MobileApp) ImportAccount(pkey string,
 
 // ImportPrivateKey imports private key to existing account in the wallet.
 //
-func (m *MobileApp) ImportPrivateKey(pkey, auth string) (*AccountEntry, error) {
+func (m *MobileApp) ImportPrivateKey(pkey, auth string, stock bool) (*AccountEntry, error) {
 	api := m.app.GetApi()
-	entry, err := api.ImportAccount(pkey, "", "", "", "", "", auth)
+	entry, err := api.ImportAccount(pkey, "", "", "", "", "", auth, stock)
 	if err != nil {
 		return nil, err
 	}
 	return fromWalletEntry(entry), nil
 }
 
+// fromPrivKey converts private key to string form.
+//
+func fromPrivKey(key *keystore.Key) *AccountKey {
+	return &AccountKey{
+		Address:    key.Address.Hex(),
+		PrivateKey: hex.EncodeToString(crypto.FromECDSA(key.PrivateKey)),
+	}
+}
+
 // OpenAccount decrypts the key, returns the key.
 //
 func (m *MobileApp) OpenAccount(acct, auth string) (*AccountKey, error) {
 	api := m.app.GetApi()
-	addr, err := kstore.GetAccount(acct)
-	if err != nil {
-		return nil, err
-	}
-	key, err := api.OpenAccount(addr, auth)
+	key, err := api.OpenAccount(acct, auth)
 	if err != nil || key == nil {
 		log.Info("Failed to open account", "account", acct)
 		return nil, err
 	}
-	return nil, nil
-	// return fromPrivKey(key), nil
+	return fromPrivKey(key), nil
 }
 
 // GetAccount returns the account matching address.
 //
 func (m *MobileApp) GetAccount(acct string) (*AccountEntry, error) {
 	api := m.app.GetApi()
-	addr, err := kstore.GetAccount(acct)
-	if err != nil {
-		return nil, err
-	}
-	entry, err := api.GetAccount(addr)
+	entry, err := api.GetAccount(acct)
 	if err != nil || entry == nil {
 		log.Info("Failed to locate account", "account", acct)
 		return nil, err
@@ -282,11 +286,7 @@ func (m *MobileApp) GetAccount(acct string) (*AccountEntry, error) {
 //
 func (m *MobileApp) CloseAccount(acct string) error {
 	api := m.app.GetApi()
-	addr, err := kstore.GetAccount(acct)
-	if err != nil {
-		return err
-	}
-	return api.CloseAccount(addr)
+	return api.CloseAccount(acct)
 }
 
 // DeleteAccountKey deletes the key, assumes user saved a hard-copy.  There's no way
@@ -294,11 +294,7 @@ func (m *MobileApp) CloseAccount(acct string) error {
 //
 func (m *MobileApp) DeleteAccountKey(acct string) error {
 	api := m.app.GetApi()
-	addr, err := kstore.GetAccount(acct)
-	if err != nil {
-		return err
-	}
-	return api.DeleteAccountKey(addr)
+	return api.DeleteAccountKey(acct)
 }
 
 func (m *MobileApp) DeleteAccount(addr, auth string) error {
@@ -306,53 +302,9 @@ func (m *MobileApp) DeleteAccount(addr, auth string) error {
 	return api.DeleteAccount(addr, auth)
 }
 
-func (m *MobileApp) PayToRelay(from, to, auth string,
-	xuAmt, chainId int64) (*RelayTransaction, error) {
-	toAcct, err := kstore.GetAccount(to)
-	if toAcct == nil || err != nil {
-		log.Info("Invalid to account", "to", to, "err", err)
-		return nil, err
-	}
-	fromAcct, err := kstore.GetAccount(from)
-	if fromAcct == nil || err != nil {
-		log.Info("Invalid from account", "from", from, "err", err)
-		return nil, err
-	}
-	m.app.Lock.Lock()
-	if m.pendFrom != "" || to == "" {
-		m.app.Lock.Unlock()
-		log.Info("Pending trans", "from", m.pendFrom, "to", to)
-		return nil, errors.New("A transaction is pending")
-	}
-	m.pendFrom = from
-	m.pendTo = to
-	m.app.Lock.Unlock()
-
-	api := m.app.GetApi()
-	tx, err := api.PayToRelay(fromAcct, toAcct, auth, uint64(xuAmt), uint64(chainId))
-	if err != nil {
-		return nil, err
-	}
-	json, err := tx.SignedTx.MarshalJSON()
-	return &RelayTransaction{
-		From:   tx.From,
-		To:     tx.To,
-		JsonTx: json,
-	}, err
-}
-
 func (m *MobileApp) PayToRelayNonce(from, to, auth string,
 	xuAmt, nonce, chainId int64) (*RelayTransaction, error) {
-	toAcct, err := kstore.GetAccount(to)
-	if toAcct == nil || err != nil {
-		log.Info("Invalid to account", "to", to, "err", err)
-		return nil, err
-	}
-	fromAcct, err := kstore.GetAccount(from)
-	if fromAcct == nil || err != nil {
-		log.Info("Invalid from account", "from", from, "err", err)
-		return nil, err
-	}
+
 	m.app.Lock.Lock()
 	if m.pendFrom != "" || to == "" {
 		m.app.Lock.Unlock()
@@ -364,8 +316,7 @@ func (m *MobileApp) PayToRelayNonce(from, to, auth string,
 	m.app.Lock.Unlock()
 
 	api := m.app.GetApi()
-	tx, err := api.PayToRelayNonce(fromAcct, toAcct, auth,
-		uint64(xuAmt), uint64(nonce), uint64(chainId))
+	tx, err := api.PayToRelayNonce(from, to, auth, uint64(xuAmt), uint64(nonce), uint64(chainId))
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +329,9 @@ func (m *MobileApp) PayToRelayNonce(from, to, auth string,
 }
 
 func (m *MobileApp) PaymentCompletion(txHash string) {
+	m.app.Lock.Lock()
 	m.pendTo = ""
 	m.pendTx = ""
 	m.pendFrom = ""
+	m.app.Lock.Unlock()
 }

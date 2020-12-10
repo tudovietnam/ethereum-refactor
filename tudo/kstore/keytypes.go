@@ -26,25 +26,6 @@ var (
 	NilAccount = accounts.Account{}
 )
 
-// AddrToAccount converts an address to account format.
-//
-func AddrToAccount(addr common.Address) *accounts.Account {
-	return &accounts.Account{
-		Address: addr,
-		URL: accounts.URL{
-			Scheme: "eth",
-			Path:   addr.Hex(),
-		},
-	}
-}
-
-func AddrStrToAccount(addr string) *accounts.Account {
-	if !common.IsHexAddress(addr) {
-		return nil
-	}
-	return AddrToAccount(common.HexToAddress(addr))
-}
-
 type WalletEntryOps interface {
 	saveRec(baseDir string) error
 	deleteRec(baseDir string) error
