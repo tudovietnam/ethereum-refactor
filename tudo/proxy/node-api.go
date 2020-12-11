@@ -4,6 +4,7 @@
 package proxy
 
 import (
+	"encoding/hex"
 	"errors"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -13,16 +14,22 @@ import (
 )
 
 type TdNodeApi struct {
-	config *TdConfig
-	kstore *kstore.TdStore
-	stop   chan struct{}
+	config  *TdConfig
+	kstore  *kstore.TdStore
+	chainId uint64
+	stockId uint64
+	stop    chan struct{}
 }
 
 func newTdNodeApi(conf *TdConfig, stop chan struct{}) *TdNodeApi {
+	chainId := conf.ChainId
+	stockId := conf.StockId
 	return &TdNodeApi{
-		config: conf,
-		stop:   stop,
-		kstore: kstore.NewTdStore(conf.KeyStoreDir),
+		config:  conf,
+		stop:    stop,
+		chainId: chainId,
+		stockId: stockId,
+		kstore:  kstore.NewTdStore(conf.KeyStoreDir, chainId, stockId),
 	}
 }
 
@@ -39,6 +46,10 @@ func (api *TdNodeApi) EnableService() error {
 	return api.kstore.EnableService()
 }
 
+func (api *TdNodeApi) DebugDump(auth string) {
+	api.kstore.DebugDump(auth)
+}
+
 // NewWalletEntry creates a new wallet entry.
 //
 func (api *TdNodeApi) NewWalletEntry(acct, grp string,
@@ -50,6 +61,7 @@ func (api *TdNodeApi) NewWalletEntry(acct, grp string,
 	}
 	entry := kstore.NewWalletEntry(account)
 	entry.Update(grp, pub, priv, contact, desc)
+
 	return entry, api.kstore.PersistEntry(entry)
 }
 
@@ -96,6 +108,14 @@ func (api *TdNodeApi) GetAccount(acct string) (*kstore.AccountEntry, error) {
 	return api.kstore.GetAccount(account)
 }
 
+func (api *TdNodeApi) GetWalletEntry(acct string) (*kstore.WalletEntry, error) {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid account address")
+	}
+	return api.kstore.GetWalletEntry(account)
+}
+
 func (api *TdNodeApi) PayToRelayNonce(from, to, auth string,
 	xuAmt, nonce, chainId uint64) (*RelaySignedTx, error) {
 
@@ -117,20 +137,20 @@ func (api *TdNodeApi) PayToRelayNonce(from, to, auth string,
 
 // CreateAccount creates a new account.
 //
-func (api *TdNodeApi) CreatAccount(pubName, privName,
+func (api *TdNodeApi) CreateAccount(pubName, privName,
 	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
 
 	log.Info("Create account", "privName", privName, "pubName", pubName)
-	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, false)
+	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, api.chainId)
 }
 
 // CreateStock creates a new account with stock contract.
 //
-func (api *TdNodeApi) CreatStock(pubName, privName,
+func (api *TdNodeApi) CreateStock(pubName, privName,
 	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
 
 	log.Info("Create stock account", "privName", privName, "pubName", pubName)
-	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, true)
+	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, api.stockId)
 }
 
 // UpdateAccount updates existing account.
@@ -150,7 +170,7 @@ func (api *TdNodeApi) UpdateAccount(address, pubName, privName,
 // ImportAccount imports external account.
 //
 func (api *TdNodeApi) ImportAccount(pKey, pubName, privName,
-	groupName, contact, desc, auth string, stock bool) (*kstore.WalletEntry, error) {
+	groupName, contact, desc, auth string, chainId uint64) (*kstore.WalletEntry, error) {
 
 	privKey, err := crypto.HexToECDSA(pKey)
 	if err != nil {
@@ -158,7 +178,7 @@ func (api *TdNodeApi) ImportAccount(pKey, pubName, privName,
 	}
 	log.Debug("Priv key", "key", privKey)
 	return api.kstore.ImportAccount(privKey, pubName,
-		privName, groupName, contact, desc, auth, stock)
+		privName, groupName, contact, desc, auth, chainId)
 }
 
 // GetAllAccounts returns all accounts in the store.
@@ -182,6 +202,18 @@ func (api *TdNodeApi) OpenAccount(acct, auth string) (*keystore.Key, error) {
 	return api.kstore.OpenAccount(account, auth)
 }
 
+type AccountKey struct {
+	Address    string
+	PrivateKey string
+}
+
+func (api *TdNodeApi) ToStringKey(key *keystore.Key) *AccountKey {
+	return &AccountKey{
+		Address:    key.Address.Hex(),
+		PrivateKey: hex.EncodeToString(crypto.FromECDSA(key.PrivateKey)),
+	}
+}
+
 // CloseAccount encrypts the key.
 //
 func (api *TdNodeApi) CloseAccount(acct string) error {
@@ -200,4 +232,12 @@ func (api *TdNodeApi) DeleteAccountKey(acct string) error {
 		return errors.New("Invalid account address")
 	}
 	return api.kstore.DeleteAccountKey(account)
+}
+
+func (api *TdNodeApi) IsEntryPersisted(entry *kstore.WalletEntry) bool {
+	return api.kstore.IsEntryPersisted(entry)
+}
+
+func (api *TdNodeApi) IsAccountPersisted(entry *kstore.AccountEntry) bool {
+	return api.kstore.IsAccountPersisted(entry)
 }

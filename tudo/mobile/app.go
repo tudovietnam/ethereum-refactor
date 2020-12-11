@@ -41,7 +41,7 @@ type AccountEntry struct {
 	Description string
 	Balance     int64
 	Nonce       int64
-	Contract    int64
+	ChainId     int64
 }
 
 type AccountKey struct {
@@ -175,7 +175,7 @@ func fromAccountEntry(a *kstore.AccountEntry) *AccountEntry {
 		entry := fromWalletEntry(&a.WalletEntry)
 		entry.Balance = int64(a.Balance)
 		entry.Nonce = int64(a.Nonce)
-		entry.Contract = int64(a.Contract)
+		entry.ChainId = int64(a.ChainId)
 		return entry
 	}
 	return nil
@@ -198,7 +198,7 @@ func (m *MobileApp) GetAddressBook(out *AccountEntryArr) {
 //
 func (m *MobileApp) CreatAccount(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
 	api := m.app.GetApi()
-	entry, err := api.CreatAccount(pub, priv, gr, ct, desc, auth)
+	entry, err := api.CreateAccount(pub, priv, gr, ct, desc, auth)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (m *MobileApp) CreatAccount(pub, priv, gr, ct, desc, auth string) (*Account
 func (m *MobileApp) CreatStock(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
 
 	api := m.app.GetApi()
-	entry, err := api.CreatStock(pub, priv, gr, ct, desc, auth)
+	entry, err := api.CreateStock(pub, priv, gr, ct, desc, auth)
 	if err != nil {
 		return nil, err
 	}
@@ -228,10 +228,10 @@ func (m *MobileApp) UpdateAccount(address, pub, priv string,
 // ImportAccount imports full account info to the wallet.
 //
 func (m *MobileApp) ImportAccount(pkey string,
-	pub, priv, gr, ct, desc, auth string, stock bool) (*AccountEntry, error) {
+	pub, priv, gr, ct, desc, auth string, chainId int64) (*AccountEntry, error) {
 
 	api := m.app.GetApi()
-	entry, err := api.ImportAccount(pkey, pub, priv, gr, ct, desc, auth, stock)
+	entry, err := api.ImportAccount(pkey, pub, priv, gr, ct, desc, auth, uint64(chainId))
 	if err != nil {
 		return nil, err
 	}
@@ -240,9 +240,9 @@ func (m *MobileApp) ImportAccount(pkey string,
 
 // ImportPrivateKey imports private key to existing account in the wallet.
 //
-func (m *MobileApp) ImportPrivateKey(pkey, auth string, stock bool) (*AccountEntry, error) {
+func (m *MobileApp) ImportPrivateKey(pkey, auth string, chainId int64) (*AccountEntry, error) {
 	api := m.app.GetApi()
-	entry, err := api.ImportAccount(pkey, "", "", "", "", "", auth, stock)
+	entry, err := api.ImportAccount(pkey, "", "", "", "", "", auth, uint64(chainId))
 	if err != nil {
 		return nil, err
 	}
@@ -280,6 +280,15 @@ func (m *MobileApp) GetAccount(acct string) (*AccountEntry, error) {
 		return nil, err
 	}
 	return fromAccountEntry(entry), nil
+}
+
+func (m *MobileApp) GetWalletEntry(acct string) (*AccountEntry, error) {
+	api := m.app.GetApi()
+	entry, err := api.GetWalletEntry(acct)
+	if err != nil || entry == nil {
+		return nil, err
+	}
+	return fromWalletEntry(entry), nil
 }
 
 // CloseAccount encrypts the key for the account.

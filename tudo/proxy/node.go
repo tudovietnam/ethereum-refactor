@@ -4,6 +4,8 @@
 package proxy
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 
@@ -16,6 +18,15 @@ type RelaySignedTx struct {
 	From     string
 	To       string
 	SignedTx types.Transaction
+}
+
+func (tx *RelaySignedTx) Print() {
+	js, err := json.Marshal(tx)
+	if err != nil {
+		fmt.Println("error: ", err)
+	} else {
+		fmt.Printf("%s\n", js)
+	}
 }
 
 /////////////////////////    S t a r t u p    A p p    /////////////////////////////////

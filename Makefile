@@ -24,6 +24,9 @@ td:
 	$(GORUN) build/ci.go install ./tudo
 	@echo "Done building tudo..."
 
+tdtest:
+	cd tudo/proxy && go test
+
 android:
 	$(GORUN) build/ci.go aar --local
 	@echo "Done building."

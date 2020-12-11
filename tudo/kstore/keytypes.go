@@ -17,8 +17,7 @@ import (
 
 const (
 	// Default time to refresh wallets from keystore.
-	DefaultGroup  = "Personal"
-	ContractNonce = 0x8fffffffffffffff
+	DefaultGroup = "Personal"
 )
 
 var (
@@ -79,23 +78,23 @@ type AccountEntry struct {
 	Balance    uint64
 	Nonce      uint64
 	BlkAt      uint64
-	Contract   uint64
+	ChainId    uint64
 }
 
 func NewAccountEntry(key *keystore.Key,
-	we *WalletEntry, auth string, contract uint64) *AccountEntry {
+	we *WalletEntry, auth string, chainId uint64) *AccountEntry {
 
 	var ae *AccountEntry = nil
 	if we != nil {
 		ae = &AccountEntry{
 			Key:         key,
-			Contract:    contract,
+			ChainId:     chainId,
 			WalletEntry: *we,
 		}
 	} else {
 		ae = &AccountEntry{
-			Key:      key,
-			Contract: contract,
+			Key:     key,
+			ChainId: chainId,
 		}
 	}
 	if err := ae.Encrypt(auth); err != nil {
@@ -116,10 +115,6 @@ func (ae *AccountEntry) ClearKey() {
 	}
 }
 
-func (ae *AccountEntry) IsContract() bool {
-	return ae.Contract == ContractNonce
-}
-
 // Serializes AccountEntry to JSON to save to persistent storage.
 //
 type AccountEntryJson struct {
@@ -129,7 +124,7 @@ type AccountEntryJson struct {
 
 type StockEntryJson struct {
 	AccountEntryJson
-	ContractNonce uint64 `json:"nonce"`
+	ChainId uint64 `json:"chainId"`
 }
 
 // GetAddress returns address from hex string.

@@ -32,7 +32,9 @@ const (
 )
 
 var (
-	bigOne *big.Int = big.NewInt(1)
+	s_bigOne       *big.Int = big.NewInt(1)
+	s_chainId      uint64
+	s_stockChainId uint64
 )
 
 type TdStore struct {
@@ -46,7 +48,10 @@ type TdStore struct {
 	Lock      sync.Mutex
 }
 
-func NewTdStore(dir string) *TdStore {
+func NewTdStore(dir string, chainId, stockChainId uint64) *TdStore {
+	s_chainId = chainId
+	s_stockChainId = stockChainId
+
 	return &TdStore{
 		cryptN:    keystore.StandardScryptN,
 		cryptP:    keystore.StandardScryptP,
@@ -109,16 +114,19 @@ func (store *TdStore) loadRecords(acct bool) filepath.WalkFunc {
 }
 
 func (store *TdStore) EnableService() error {
+	return nil
+}
+
+func (store *TdStore) DebugDump(auth string) {
 	fmt.Println("Account entries")
 	for _, elm := range store.accounts {
-		elm.Decrypt("*T$ypmwl@DJK54mAeFiX")
+		elm.Decrypt(auth)
 		elm.Print(false)
 	}
 	fmt.Println("Address book entries")
 	for _, elm := range store.addrBook {
 		elm.Print()
 	}
-	return nil
 }
 
 func (store *TdStore) UpdateWalletEntry(acct *accounts.Account,
@@ -135,15 +143,31 @@ func (store *TdStore) UpdateWalletEntry(acct *accounts.Account,
 }
 
 func (store *TdStore) PersistEntry(entry *WalletEntry) error {
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	if store.addrBook[entry.AccountKey()] == nil {
+		store.addrBook[entry.AccountKey()] = entry
+	}
 	return entry.saveRec(store.bookDir)
+}
+
+func (store *TdStore) IsEntryPersisted(entry *WalletEntry) bool {
+	return entry.isPersisted(store.bookDir)
+}
+
+func (store *TdStore) IsAccountPersisted(entry *AccountEntry) bool {
+	return entry.isPersisted(store.acctDir)
 }
 
 func (store *TdStore) DeleteEntry(account *accounts.Account) error {
 	store.Lock.Lock()
 	defer store.Lock.Unlock()
 
-	entry := store.addrBook[account.Address.Hex()]
+	addr := account.Address.Hex()
+	entry := store.addrBook[addr]
 	if entry != nil {
+		delete(store.addrBook, addr)
 		return entry.deleteRec(store.bookDir)
 	}
 	return nil
@@ -153,8 +177,10 @@ func (store *TdStore) DeleteAccount(account *accounts.Account, auth string) erro
 	store.Lock.Lock()
 	defer store.Lock.Unlock()
 
-	entry := store.accounts[account.Address.Hex()]
+	addr := account.Address.Hex()
+	entry := store.accounts[addr]
 	if entry != nil {
+		delete(store.accounts, addr)
 		return entry.deleteRec(store.acctDir)
 	}
 	return nil
@@ -165,6 +191,13 @@ func (store *TdStore) GetAccount(account *accounts.Account) (*AccountEntry, erro
 	defer store.Lock.Unlock()
 
 	return store.accounts[account.Address.Hex()], nil
+}
+
+func (store *TdStore) GetWalletEntry(account *accounts.Account) (*WalletEntry, error) {
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	return store.addrBook[account.Address.Hex()], nil
 }
 
 type sendTx struct {
@@ -183,7 +216,7 @@ func (stx *sendTx) setDefaults() error {
 		stx.Gas = 100000
 	}
 	if stx.GasPrice == nil {
-		stx.GasPrice = bigOne
+		stx.GasPrice = s_bigOne
 	}
 	if stx.Data != nil && stx.Input != nil && !bytes.Equal(*stx.Data, *stx.Input) {
 		return errors.New(`Both "data" and "input" are set and not equal`)
@@ -259,12 +292,12 @@ func (store *TdStore) newKey(rand io.Reader) (*keystore.Key, error) {
 }
 
 func (store *TdStore) CreateAccount(pub, priv, group, contact, desc, auth string,
-	stock bool) (*WalletEntry, error) {
+	chainId uint64) (*WalletEntry, error) {
 	key, err := store.newKey(crand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	return store.ImportAccount(key.PrivateKey, pub, priv, group, contact, desc, auth, stock)
+	return store.ImportAccount(key.PrivateKey, pub, priv, group, contact, desc, auth, chainId)
 }
 
 func (store *TdStore) UpdateAccount(account *accounts.Account,
@@ -293,10 +326,86 @@ func (store *TdStore) UpdateAccount(account *accounts.Account,
 	return nil, errors.New("No matching account")
 }
 
-func (store *TdStore) ImportAccount(privKey *ecdsa.PrivateKey,
-	pub, priv, group, contact, desc, auth string, stock bool) (*WalletEntry, error) {
+func importPrivateKey(keyHex []byte, auth string) (*keystore.Key, error) {
+	key := keystore.Key{}
+	err := key.UnmarshalJSON(keyHex)
 
-	return nil, nil
+	if err != nil {
+		keyPtr, err := keystore.DecryptKey(keyHex, auth)
+		if keyPtr == nil || err != nil {
+			return nil, err
+		}
+		key.Id = keyPtr.Id
+		key.Address = keyPtr.Address
+		key.PrivateKey = keyPtr.PrivateKey
+	}
+	return &key, err
+}
+
+func (store *TdStore) Import(json []byte, auth string, chainId uint64) (*WalletEntry, error) {
+	key, err := importPrivateKey(json, auth)
+	if err != nil || key.PrivateKey == nil {
+		return nil, errors.New("Invalid json key")
+	}
+	return store.ImportAccount(key.PrivateKey, "", "", "", "", "", auth, chainId)
+}
+
+func (store *TdStore) ImportAccount(privKey *ecdsa.PrivateKey,
+	pub, priv, group, contact, desc, auth string, chainId uint64) (*WalletEntry, error) {
+	address := crypto.PubkeyToAddress(privKey.PublicKey)
+
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	key := fromPrivKeyECDSA(privKey)
+	addrHex := address.Hex()
+	account := store.accounts[addrHex]
+	if account == nil {
+		account = &AccountEntry{
+			Key: key,
+			WalletEntry: WalletEntry{
+				Account:     &accounts.Account{Address: address},
+				JsonAcct:    addrHex,
+				GroupName:   group,
+				PublicName:  pub,
+				PrivateName: priv,
+				ContactInfo: contact,
+				Description: desc,
+			},
+			EncryptKey: nil,
+			Balance:    0,
+			Nonce:      0,
+			BlkAt:      0,
+			ChainId:    chainId,
+		}
+		if err := account.Encrypt(auth); err != nil {
+			return nil, err
+		}
+		store.accounts[addrHex] = account
+	} else {
+		if account.Key == nil && account.Encrypt != nil {
+			if err := account.Decrypt(auth); err != nil {
+				log.Error("Failed to decrypt account", "address", addrHex)
+				return nil, err
+			}
+		}
+		if account.Key != nil {
+			if account.Key.PrivateKey.D.Cmp(key.PrivateKey.D) != 0 &&
+				bytes.Compare(account.Key.Address[:], key.Address[:]) != 0 {
+				return nil, errors.New("Account has different key")
+			}
+		} else {
+			account.Key = key
+			if err := account.Encrypt(auth); err != nil {
+				return nil, err
+			}
+		}
+		account.Update(group, pub, priv, contact, desc)
+	}
+	if err := account.saveRec(store.acctDir); err != nil {
+		return nil, err
+	}
+	return &account.WalletEntry, nil
 }
 
 func (store *TdStore) GetAllAccounts() ([]AccountEntry, error) {
@@ -344,14 +453,21 @@ func (store *TdStore) CloseAccount(acct *accounts.Account) error {
 
 	account := store.accounts[acct.Address.Hex()]
 	if account != nil {
-		account.DeleteKey()
+		account.LockKey()
 		return nil
 	}
 	return errors.New("No matching account")
 }
 
 func (store *TdStore) DeleteAccountKey(acct *accounts.Account) error {
-	return store.CloseAccount(acct)
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	account := store.accounts[acct.Address.Hex()]
+	if account != nil {
+		return account.DeleteKey(store.acctDir)
+	}
+	return errors.New("No matching account")
 }
 
 //////////////////    W a l l e t    A d d r e s s b o o k    //////////////////////////
@@ -498,7 +614,8 @@ func (we *WalletEntry) Print() {
 	if we.Account != nil {
 		acct = fmt.Sprintf("%s %s", we.Account.Address.Hex(), we.Account.URL.String())
 	}
-	fmt.Printf(`Account......... %s
+	fmt.Printf(`...........................................
+Account......... %s
 ETag............ %s
 JsonAcct........ %s
 Group Name...... %s
@@ -564,13 +681,13 @@ func (ae *AccountEntry) SerializeSha1() ([]byte, string) {
 		content []byte
 		err     error
 	)
-	if ae.Contract == ContractNonce {
+	if ae.ChainId == s_stockChainId {
 		jsonEntry := StockEntryJson{
 			AccountEntryJson: AccountEntryJson{
 				Info:       ae.WalletEntry,
 				EncryptKey: ae.EncryptKey,
 			},
-			ContractNonce: ae.Contract,
+			ChainId: ae.ChainId,
 		}
 		content, err = json.Marshal(&jsonEntry)
 	} else {
@@ -597,11 +714,11 @@ func (ae *AccountEntry) Deserialize(decode *json.Decoder) error {
 		if err != nil {
 			return err
 		}
-		jsonEntry.ContractNonce = 0
+		jsonEntry.ChainId = 0
 	}
 	ae.WalletEntry = jsonEntry.Info
 	ae.EncryptKey = jsonEntry.EncryptKey
-	ae.Contract = jsonEntry.ContractNonce
+	ae.ChainId = jsonEntry.ChainId
 	return nil
 }
 
@@ -649,9 +766,15 @@ func (ae *AccountEntry) LockKey() {
 	ae.Key = nil
 }
 
-func (ae *AccountEntry) DeleteKey() {
+func (ae *AccountEntry) DeleteKey(base string) error {
 	ae.LockKey()
+	err := ae.deleteRec(base)
+
+	if err != nil {
+		return err
+	}
 	ae.EncryptKey = nil
+	return ae.saveRec(base)
 }
 
 // Print formats AccountEntry content to debug string.
@@ -677,18 +800,6 @@ Private key..... %s
 	fmt.Println("--------------------------------------------------------")
 }
 
-func (ae *AccountEntry) ImportPrivateKey(keyHex []byte, auth string, stock bool) error {
-	key := keystore.Key{}
-	err := key.UnmarshalJSON(keyHex)
-
-	if err != nil {
-		keyPtr, err := keystore.DecryptKey(keyHex, auth)
-		if keyPtr == nil || err != nil {
-			return err
-		}
-		key.Id = keyPtr.Id
-		key.Address = keyPtr.Address
-		key.PrivateKey = keyPtr.PrivateKey
-	}
-	return err
+func (ae *AccountEntry) IsContract() bool {
+	return ae.ChainId == s_stockChainId
 }

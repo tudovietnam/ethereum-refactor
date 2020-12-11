@@ -23,6 +23,8 @@ type TdConfig struct {
 	DataDir     string
 	KeyStoreDir string
 	GasPrice    int
+	ChainId     uint64
+	StockId     uint64
 }
 
 const (
@@ -37,6 +39,8 @@ var (
 	defaultConfig = `
 DataDir = "data"
 GasPrice = 1
+ChainId = 1973
+StockId = 1993
 `
 
 	// These settings ensure that TOML keys use the same names as Go struct fields.
