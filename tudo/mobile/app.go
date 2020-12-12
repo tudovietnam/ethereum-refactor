@@ -225,6 +225,15 @@ func (m *MobileApp) UpdateAccount(address, pub, priv string,
 	return fromAccountEntry(entry), err
 }
 
+func (m *MobileApp) UpdateWalletEntry(adr, pub, priv, gr, ct, desc string) (*AccountEntry, error) {
+	api := m.app.GetApi()
+	entry, err := api.UpdateWalletEntry(adr, gr, pub, priv, ct, desc)
+	if err != nil {
+		return nil, err
+	}
+	return fromWalletEntry(entry), err
+}
+
 // ImportAccount imports full account info to the wallet.
 //
 func (m *MobileApp) ImportAccount(pkey string,
@@ -270,6 +279,13 @@ func (m *MobileApp) OpenAccount(acct, auth string) (*AccountKey, error) {
 	return fromPrivKey(key), nil
 }
 
+// CloseAccount encrypts the key for the account.
+//
+func (m *MobileApp) CloseAccount(acct string) error {
+	api := m.app.GetApi()
+	return api.CloseAccount(acct)
+}
+
 // GetAccount returns the account matching address.
 //
 func (m *MobileApp) GetAccount(acct string) (*AccountEntry, error) {
@@ -291,13 +307,6 @@ func (m *MobileApp) GetWalletEntry(acct string) (*AccountEntry, error) {
 	return fromWalletEntry(entry), nil
 }
 
-// CloseAccount encrypts the key for the account.
-//
-func (m *MobileApp) CloseAccount(acct string) error {
-	api := m.app.GetApi()
-	return api.CloseAccount(acct)
-}
-
 // DeleteAccountKey deletes the key, assumes user saved a hard-copy.  There's no way
 // to recover back a deleted key.
 //
@@ -309,6 +318,11 @@ func (m *MobileApp) DeleteAccountKey(acct string) error {
 func (m *MobileApp) DeleteAccount(addr, auth string) error {
 	api := m.app.GetApi()
 	return api.DeleteAccount(addr, auth)
+}
+
+func (m *MobileApp) DeleteWalletEntry(acct string) error {
+	api := m.app.GetApi()
+	return api.DeleteEntry(acct)
 }
 
 func (m *MobileApp) PayToRelayNonce(from, to, auth string,
