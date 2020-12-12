@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/tudo/kstore"
 	"github.com/stretchr/testify/assert"
 )
@@ -82,6 +83,7 @@ func cleanupTests(t *testing.T) {
 		assert.Nil(err, "Failed to delete addrbook entry", key, err)
 	}
 	// Verify keystore is empty.
+
 	accounts, err = api.GetAllAccounts()
 	verifyNoErr(assert, err, len(accounts) == 0, "Failed to remove accounts")
 
@@ -122,7 +124,7 @@ func verifyEntry(assert *assert.Assertions, api *TdNodeApi, name string) {
 	entry, err := api.GetWalletEntry(acct)
 
 	verifyNoErr(assert, err, entry != nil, "Failed to create wallet entry")
-	assert.Condition(func() bool { return api.IsEntryPersisted(entry) }, acct, "Not on disk")
+	assert.Condition(func() bool { return api.IsEntryPersisted(acct) }, acct, "Not on disk")
 }
 
 func createTests(t *testing.T) {
@@ -152,8 +154,35 @@ func createTests(t *testing.T) {
 func updateTests(t *testing.T) {
 	fmt.Println("Test update accounts")
 	api := getApi()
-	api.Stop()
+	assert := assert.New(t)
 
+	acct := _accounts[gcAccountB]
+	account, err := api.GetAccount(acct)
+	verifyNoErr(assert, err, account != nil, "Failed to locate account")
+
+	orig := *account
+	change, err := api.UpdateAccount(acct, "New Public B", "New Private B", "New Group",
+		"New Contact", "New Description", gcAuthStr, "welcome")
+	verifyNoErr(assert, err, change != nil, "Failed to update account")
+
+	str := "Must be the same"
+	assert.Equal(account.JsonAcct, change.JsonAcct, str)
+	assert.Equal(account.ChainId, change.ChainId, str)
+
+	key, err := api.OpenAccount(acct, gcAuthStr)
+	assert.Nil(key, "Changed passcode")
+	fmt.Println("Expected error:", err)
+
+	key, err = api.OpenAccount(acct, "welcome")
+	verifyNoErr(assert, err, key != nil, "Match passcode account")
+
+	change, err = api.UpdateAccount(acct, orig.PublicName, orig.PrivateName,
+		orig.GroupName, orig.ContactInfo, orig.Description, "welcome", gcAuthStr)
+	verifyNoErr(assert, err, change != nil, "Failed to update account")
+
+	assert.Equal(orig.PublicName, change.PublicName, str)
+	assert.Equal(orig.PrivateName, change.PrivateName, str)
+	assert.Equal(orig.GroupName, change.GroupName, str)
 }
 
 func importTests(t *testing.T) {
@@ -161,37 +190,88 @@ func importTests(t *testing.T) {
 	api := getApi()
 	assert := assert.New(t)
 
+	fmt.Println("\tAPI to unlock account key")
 	acct := _accounts[gcAccountC]
 	key, err := api.OpenAccount(acct, gcAuthStr)
-	verifyNoErr(assert, err, key != nil, "Failed to lock account")
+	verifyNoErr(assert, err, key != nil, "Failed to unlock account")
 
 	keyStr := api.ToStringKey(key)
 	err = api.CloseAccount(acct)
 	verifyNoErr(assert, err, keyStr != nil, "Failed to unlock account")
 
+	fmt.Println("\tAPI to unlock account key with wrong passcode")
 	key, err = api.OpenAccount(acct, "wrong")
 	assert.Nil(key, "Must not be able to decode key")
 	assert.NotNil(err, "Must have error")
 	fmt.Println("Expected error:", err)
 
-	account, err := api.GetAccount(acct)
-	verifyNoErr(assert, err, account != nil, "Failed to get account")
-	assert.Condition(func() bool { return api.IsAccountPersisted(account) }, acct, "Not on disk")
-
-	err = api.DeleteAccountKey(acct)
-	assert.Nil(err, "Failed to delete key")
-	assert.Condition(func() bool { return api.IsAccountPersisted(account) }, acct, "Not on disk")
-
-	entry, err := api.ImportAccount(keyStr.PrivateKey,
-		"", "", "", "", "", gcAuthStr, account.ChainId)
-
-	fmt.Printf("account %p, entry %p, err %s\n", account, entry, err)
-	/*
+	assertAccount := func(err error, account *kstore.AccountEntry) {
+		verifyNoErr(assert, err, account != nil, "Failed to get account")
+		assert.Condition(func() bool { return api.IsAccountPersisted(acct) }, acct, "Not on disk")
+	}
+	assertEntries := func(err error, entry *kstore.WalletEntry, account *kstore.AccountEntry) {
 		verifyNoErr(assert, err, entry != nil, "Failed to import key")
 		assert.Equal(entry.JsonAcct, account.JsonAcct, "Account must be the same")
-		assert.Equal(entry.ETag, account.ETag, "ETag must be the same")
-	*/
-	api.DebugDump(gcAuthStr)
+		assert.Equal(entry.PublicName, account.PublicName, "Public name must be the same")
+		assert.Equal(entry.PrivateName, account.PrivateName, "Public name must be the same")
+	}
+
+	account, err := api.GetAccount(acct)
+	assertAccount(err, account)
+
+	fmt.Println("\tAPI to delete account key")
+	err = api.DeleteAccountKey(acct)
+	assertAccount(err, account)
+
+	// Import account not having private key.
+	fmt.Println("\tAPI to import the key back to account")
+	entry, err := api.ImportAccount(keyStr.PrivateKey,
+		"", "", "", "", "", gcAuthStr, account.ChainId)
+	assertEntries(err, entry, account)
+
+	// Import the same account now has the same private key.
+	fmt.Println("\tAPI to import same key to account")
+	entry, err = api.ImportAccount(keyStr.PrivateKey,
+		entry.PublicName, entry.PrivateName, "", "", "", gcAuthStr, account.ChainId)
+	assertEntries(err, entry, account)
+
+	// Delete the account.
+	fmt.Println("\tAPI to delete the account")
+	err = api.DeleteAccount(acct, gcAuthStr)
+	assert.Nil(err, "Must not have delete error", err)
+	assert.Condition(func() bool { return !api.IsAccountPersisted(acct) }, acct, "Still on disk")
+
+	// Restore the same account.
+	fmt.Println("\tAPI to import the account from key")
+	entry, err = api.ImportAccount(keyStr.PrivateKey,
+		entry.PublicName, entry.PrivateName, entry.GroupName, entry.ContactInfo,
+		entry.Description, gcAuthStr, account.ChainId)
+	assertEntries(err, entry, account)
+
+	// Verify keys
+	nKey, err := api.OpenAccount(acct, gcAuthStr)
+	verifyNoErr(assert, err, nKey != nil, "Failed to unlock account")
+
+	nKeyStr := api.ToStringKey(nKey)
+	assert.Equal(keyStr, nKeyStr, "Keys must be the same")
+
+	fmt.Println("\tAPI to import wrong key to the account")
+	actb := _accounts[gcAccountB]
+	bKey, err := api.OpenAccount(actb, gcAuthStr)
+	verifyNoErr(assert, err, bKey != nil, "Failed to unlock account")
+
+	bKeyStr := api.ToStringKey(bKey)
+	assert.NotEqual(keyStr, bKeyStr, "Not same key")
+}
+
+func verifyTx(assert *assert.Assertions, tx1, tx2 *types.Transaction) {
+	str := "Tx transaction must be identical"
+	assert.Equal(tx1.Hash(), tx2.Hash(), str)
+	if tx1.To() != nil {
+		assert.Equal(*tx1.To(), *tx2.To(), str)
+	} else {
+		assert.Equal(tx1.To(), tx2.To(), str)
+	}
 }
 
 func signTests(t *testing.T) {
@@ -202,7 +282,30 @@ func signTests(t *testing.T) {
 	to := _accounts[gcAccountB]
 	from := _accounts[gcAccountA]
 
-	relay, err := api.PayToRelayNonce(from, to, gcAuthStr, 100, 200, 1973)
-	verifyNoErr(assert, err, relay != nil, "Failed to sign tx")
-	relay.Print()
+	r1, err := api.PayToRelayNonce(from, to, gcAuthStr, 100, 200, 1973)
+	verifyNoErr(assert, err, r1 != nil, "Failed to sign tx")
+	r1.Print()
+
+	r2, err := api.PayToRelayNonce(from, to, gcAuthStr, 100, 200, 1973)
+	verifyNoErr(assert, err, r1 != nil, "Failed to sign tx")
+	verifyTx(assert, &r1.SignedTx, &r2.SignedTx)
 }
+
+func signTx(api *TdNodeApi, from, to string, nonce, amt uint64) {
+	tx, err := api.PayToRelayNonce(from, to, gcAuthStr, nonce, amt, 1973)
+	if tx == nil || err != nil {
+		fmt.Println("Failed to sign tx", err)
+	}
+}
+
+/*
+func BenchmarkTxSign(b *testing.B) {
+	to := _accounts[gcAccountB]
+	from := _accounts[gcAccountA]
+
+	api := getApi()
+	for i := 0; i < b.N; i++ {
+		signTx(api, from, to, uint64(i), 1000)
+	}
+}
+*/

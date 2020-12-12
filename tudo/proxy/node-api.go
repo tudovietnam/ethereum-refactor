@@ -46,6 +46,10 @@ func (api *TdNodeApi) EnableService() error {
 	return api.kstore.EnableService()
 }
 
+func (api *TdNodeApi) GetStoreApi() kstore.TdStoreApi {
+	return api.kstore
+}
+
 func (api *TdNodeApi) DebugDump(auth string) {
 	api.kstore.DebugDump(auth)
 }
@@ -234,10 +238,19 @@ func (api *TdNodeApi) DeleteAccountKey(acct string) error {
 	return api.kstore.DeleteAccountKey(account)
 }
 
-func (api *TdNodeApi) IsEntryPersisted(entry *kstore.WalletEntry) bool {
-	return api.kstore.IsEntryPersisted(entry)
+func (api *TdNodeApi) IsEntryPersisted(acct string) bool {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		return false
+	}
+	return api.kstore.IsEntryPersisted(account)
 }
 
-func (api *TdNodeApi) IsAccountPersisted(entry *kstore.AccountEntry) bool {
-	return api.kstore.IsAccountPersisted(entry)
+func (api *TdNodeApi) IsAccountPersisted(acct string) bool {
+	account, err := kstore.GetAccount(acct)
+	if account == nil || err != nil {
+		log.Error("Invalid account addr", "addr", acct)
+		return false
+	}
+	return api.kstore.IsAccountPersisted(account)
 }

@@ -152,12 +152,26 @@ func (store *TdStore) PersistEntry(entry *WalletEntry) error {
 	return entry.saveRec(store.bookDir)
 }
 
-func (store *TdStore) IsEntryPersisted(entry *WalletEntry) bool {
-	return entry.isPersisted(store.bookDir)
+func (store *TdStore) IsEntryPersisted(addr *accounts.Account) bool {
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	entry := store.addrBook[addr.Address.Hex()]
+	if entry != nil {
+		return entry.isPersisted(store.bookDir)
+	}
+	return false
 }
 
-func (store *TdStore) IsAccountPersisted(entry *AccountEntry) bool {
-	return entry.isPersisted(store.acctDir)
+func (store *TdStore) IsAccountPersisted(addr *accounts.Account) bool {
+	store.Lock.Lock()
+	defer store.Lock.Unlock()
+
+	entry := store.accounts[addr.Address.Hex()]
+	if entry != nil {
+		return entry.isPersisted(store.acctDir)
+	}
+	return false
 }
 
 func (store *TdStore) DeleteEntry(account *accounts.Account) error {
@@ -180,6 +194,9 @@ func (store *TdStore) DeleteAccount(account *accounts.Account, auth string) erro
 	addr := account.Address.Hex()
 	entry := store.accounts[addr]
 	if entry != nil {
+		if err := entry.Decrypt(auth); err != nil {
+			return err
+		}
 		delete(store.accounts, addr)
 		return entry.deleteRec(store.acctDir)
 	}
@@ -316,6 +333,7 @@ func (store *TdStore) UpdateAccount(account *accounts.Account,
 			if err = entry.Encrypt(newAuth); err != nil {
 				return nil, err
 			}
+			entry.LockKey()
 		}
 		entry.Update(group, pub, priv, contact, desc)
 		if err := entry.saveRec(store.acctDir); err != nil {
@@ -383,7 +401,7 @@ func (store *TdStore) ImportAccount(privKey *ecdsa.PrivateKey,
 		}
 		store.accounts[addrHex] = account
 	} else {
-		if account.Key == nil && account.Encrypt != nil {
+		if account.Key == nil && account.EncryptKey != nil {
 			if err := account.Decrypt(auth); err != nil {
 				log.Error("Failed to decrypt account", "address", addrHex)
 				return nil, err
@@ -660,6 +678,7 @@ func (ae *AccountEntry) restoreRec(path string) error {
 }
 
 func (ae *AccountEntry) deleteRec(base string) error {
+	ae.LockKey()
 	_, hash := ae.SerializeSha1()
 	return ae.WalletEntry.deleteRecHash(base, hash)
 }
@@ -758,11 +777,7 @@ func (ae *AccountEntry) LockKey() {
 	if ae.Key == nil {
 		return
 	}
-	privKey := ae.Key.PrivateKey
-	b := privKey.D.Bits()
-	for i := range b {
-		b[i] = 0
-	}
+	ae.ClearKey()
 	ae.Key = nil
 }
 

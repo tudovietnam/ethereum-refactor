@@ -25,12 +25,39 @@ var (
 	NilAccount = accounts.Account{}
 )
 
+type TdStoreApi interface {
+	Load() error
+	DebugDump(auth string)
+	UpdateWalletEntry(addr *accounts.Account,
+		grp, pub, priv, contact, desc string) (*WalletEntry, error)
+
+	PersistEntry(entry *WalletEntry) error
+	IsEntryPersisted(addr *accounts.Account) bool
+	IsAccountPersisted(addr *accounts.Account) bool
+	DeleteEntry(addr *accounts.Account) error
+	DeleteAccount(addr *accounts.Account, auth string) error
+	GetAccount(addr *accounts.Account) (*AccountEntry, error)
+	GetWalletEntry(addr *accounts.Account) (*WalletEntry, error)
+
+	CreateAccount(pub, priv, grp, contact, desc, auth string, chainId uint64) (*WalletEntry, error)
+	UpdateAccount(addr *accounts.Account,
+		pub, priv, grp, contact, desc, oldAuth, newAuth string) (*AccountEntry, error)
+	Import(json []byte, auth string, chainId uint64) (*WalletEntry, error)
+	GetAllAccounts() ([]AccountEntry, error)
+	GetAddressBook() ([]WalletEntry, error)
+	OpenAccount(addr *accounts.Account, auth string) (*keystore.Key, error)
+	CloseAccount(addr *accounts.Account) error
+	DeleteAccountKey(addr *accounts.Account) error
+}
+
 type WalletEntryOps interface {
 	saveRec(baseDir string) error
 	deleteRec(baseDir string) error
 	selfVerify(path string) error
 	restoreRec(path string) error
 	isPersisted(baseDir string) bool
+
+	AccountKey() string
 	SerializeSha1() ([]byte, string)
 	Deserialize(decode *json.Decoder) error
 }
