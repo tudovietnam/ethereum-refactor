@@ -4,13 +4,18 @@
 package proxy
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/ecies"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/tudo/kstore"
+	"github.com/ethereum/go-ethereum/tudo/utils"
 )
 
 type TdNodeApi struct {
@@ -19,6 +24,16 @@ type TdNodeApi struct {
 	chainId uint64
 	stockId uint64
 	stop    chan struct{}
+}
+
+type SignedMessage struct {
+	Address  []byte
+	MesgHash string
+	RValue   string
+	SValue   string
+	MesgType int
+	HashType int
+	Mesg     []byte
 }
 
 func newTdNodeApi(conf *TdConfig, stop chan struct{}) *TdNodeApi {
@@ -52,6 +67,20 @@ func (api *TdNodeApi) GetStoreApi() kstore.TdStoreApi {
 
 func (api *TdNodeApi) DebugDump(auth string) {
 	api.kstore.DebugDump(auth)
+}
+
+func (api *TdNodeApi) GetPublicKey(addr, auth string) ([]byte, error) {
+	account, err := api.GetAccount(addr)
+	if account == nil || err != nil {
+		return nil, errors.New("Invalid address")
+	}
+	err = account.Decrypt(auth)
+	if err != nil || account.Key == nil {
+		return nil, err
+	}
+	pubKey := crypto.FromECDSAPub(&account.Key.PrivateKey.PublicKey)
+	account.LockKey()
+	return pubKey, nil
 }
 
 // NewWalletEntry creates a new wallet entry.
@@ -253,4 +282,100 @@ func (api *TdNodeApi) IsAccountPersisted(acct string) bool {
 		return false
 	}
 	return api.kstore.IsAccountPersisted(account)
+}
+
+func (api *TdNodeApi) getPrivKey(addr, auth string) (*keystore.Key, error) {
+	account, err := api.GetAccount(addr)
+	if account == nil || err != nil {
+		return nil, err
+	}
+	err = account.Decrypt(auth)
+	if err != nil || account.Key == nil {
+		return nil, err
+	}
+	return account.Key, nil
+}
+
+func (api *TdNodeApi) SignMesg(from, auth, mesg string) (*SignedMessage, error) {
+	key, err := api.getPrivKey(from, auth)
+	if err != nil || key == nil {
+		return nil, err
+	}
+	return api.seal(key, []byte(mesg))
+}
+
+func (api *TdNodeApi) seal(key *keystore.Key, mesg []byte) (*SignedMessage, error) {
+	privKey := key.PrivateKey
+	pubKey := crypto.FromECDSAPub(&key.PrivateKey.PublicKey)
+
+	data := []byte(mesg)
+	hash := sha256.Sum256(data)
+	r, s, err := ecdsa.Sign(rand.Reader, privKey, hash[:])
+	if err != nil {
+		return nil, err
+	}
+	return &SignedMessage{
+		Address:  pubKey,
+		MesgHash: "0x" + utils.ToHex(hash[:]),
+		RValue:   r.String(),
+		SValue:   s.String(),
+		HashType: 256,
+		MesgType: 0,
+		Mesg:     data,
+	}, nil
+}
+
+func (api *TdNodeApi) EncryptAndSign(from, auth, mesg, to string,
+	pubKey []byte) (*SignedMessage, error) {
+
+	key, err := api.getPrivKey(from, auth)
+	if err != nil || key == nil {
+		return nil, err
+	}
+	cipherText, err := api.encryptData([]byte(pubKey), []byte(mesg))
+	if err != nil {
+		return nil, err
+	}
+	return api.seal(key, cipherText)
+}
+
+func (api *TdNodeApi) encryptData(pubKey, mesg []byte) ([]byte, error) {
+	pKey, err := crypto.UnmarshalPubkey(pubKey)
+	if err != nil || pKey == nil || mesg == nil {
+		if err == nil {
+			err = errors.New("Empty encrypted message")
+		}
+		return nil, err
+	}
+	encKey := ecies.ImportECDSAPublic(pKey)
+	return ecies.Encrypt(rand.Reader, encKey, mesg, nil, nil)
+}
+
+func (api *TdNodeApi) EncryptMesg(fr, auth, mesg, to string, pub []byte) (*SignedMessage, error) {
+	cipherText, err := api.encryptData([]byte(pub), []byte(mesg))
+	if err != nil {
+		return nil, err
+	}
+	return &SignedMessage{
+		Address:  nil,
+		MesgHash: "",
+		RValue:   "",
+		SValue:   "",
+		HashType: 0,
+		MesgType: 0,
+		Mesg:     cipherText,
+	}, nil
+}
+
+func (api *TdNodeApi) DecryptMesg(addr, auth string, cipher []byte) (string, error) {
+	key, err := api.getPrivKey(addr, auth)
+	if err != nil || key == nil {
+		return "", err
+	}
+	pKey := ecies.ImportECDSA(key.PrivateKey)
+	text, err := pKey.Decrypt(cipher, nil, nil)
+	if text != nil {
+		return string(text), nil
+	}
+	return "", nil
 }

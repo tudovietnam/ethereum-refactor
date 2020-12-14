@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sync"
@@ -51,6 +52,7 @@ func TestAppApi(t *testing.T) {
 	t.Run("Cleanup keystore", cleanupTests)
 	t.Run("Create accounts", createTests)
 	t.Run("Sign transactions", signTests)
+	t.Run("Encrypt/decrypt tests", encryptTests)
 	t.Run("Update accounts", updateTests)
 	t.Run("Import accounts", importTests)
 	t.Run("Cleanup keystore", cleanupTests)
@@ -59,6 +61,9 @@ func TestAppApi(t *testing.T) {
 
 func verifyNoErr(assert *assert.Assertions, err error, cond bool, header string) {
 	assert.Condition(func() bool { return err == nil && cond }, header)
+	if err != nil {
+		fmt.Println(">>> Error", err)
+	}
 }
 
 func cleanupTests(t *testing.T) {
@@ -295,6 +300,30 @@ func signTx(api *TdNodeApi, from, to string, nonce, amt uint64) {
 	tx, err := api.PayToRelayNonce(from, to, gcAuthStr, nonce, amt, 1973)
 	if tx == nil || err != nil {
 		fmt.Println("Failed to sign tx", err)
+	}
+}
+
+func encryptTests(t *testing.T) {
+	fmt.Println("Encrypt/decrypt test")
+	data := "This is the original text"
+	api := getApi()
+	assert := assert.New(t)
+
+	to := _accounts[gcAccountB]
+	pubKey, err := api.GetPublicKey(to, gcAuthStr)
+	verifyNoErr(assert, err, pubKey != nil, "Failed to get public key")
+
+	sign, err := api.EncryptMesg(_accounts[gcAccountA], gcAuthStr, data, to, pubKey)
+	verifyNoErr(assert, err, sign != nil, "Failed to encrypt data")
+
+	if sign != nil {
+		decrypt, err := api.DecryptMesg(to, gcAuthStr, sign.Mesg)
+		verifyNoErr(assert, err, decrypt != "", "Failed to decrypt data")
+		assert.Equal(data, decrypt, "Must be the same as original")
+
+		fmt.Println("Encrypt hexdump")
+		fmt.Println(hex.Dump(sign.Mesg))
+		fmt.Println("Decode data:", decrypt)
 	}
 }
 

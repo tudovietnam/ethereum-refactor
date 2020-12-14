@@ -4,6 +4,7 @@
 package mobile
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -53,6 +54,16 @@ type RelayTransaction struct {
 	From   string
 	To     string
 	JsonTx []byte
+}
+
+type SignedMessage struct {
+	Address  string
+	MesgHash string
+	RValue   string
+	SValue   string
+	MesgType int
+	HashType int
+	Mesg     []byte
 }
 
 /**
@@ -206,9 +217,17 @@ func (m *MobileApp) CreatAccount(pub, priv, gr, ct, desc, auth string) (*Account
 }
 
 func (m *MobileApp) CreatStock(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
-
 	api := m.app.GetApi()
 	entry, err := api.CreateStock(pub, priv, gr, ct, desc, auth)
+	if err != nil {
+		return nil, err
+	}
+	return fromWalletEntry(entry), nil
+}
+
+func (m *MobileApp) NewWalletEntry(addr, g, pub, priv, ct, d string) (*AccountEntry, error) {
+	api := m.app.GetApi()
+	entry, err := api.NewWalletEntry(addr, g, pub, priv, ct, d)
 	if err != nil {
 		return nil, err
 	}
@@ -357,4 +376,73 @@ func (m *MobileApp) PaymentCompletion(txHash string) {
 	m.pendTx = ""
 	m.pendFrom = ""
 	m.app.Lock.Unlock()
+}
+
+func (m *MobileApp) QueryPending() string {
+	return m.pendTx
+}
+
+func (m *MobileApp) GetPublicKey(addr, auth string) (string, error) {
+	api := m.app.GetApi()
+	key, err := api.GetPublicKey(addr, auth)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(key), nil
+}
+
+func toSignedMessage(signed *proxy.SignedMessage) *SignedMessage {
+	return &SignedMessage{
+		Address:  base64.StdEncoding.EncodeToString(signed.Address),
+		MesgHash: string(signed.MesgHash),
+		RValue:   signed.RValue,
+		SValue:   signed.SValue,
+		MesgType: int(signed.MesgType),
+		HashType: int(signed.HashType),
+		Mesg:     signed.Mesg,
+	}
+}
+
+func (m *MobileApp) SignMesg(from, auth, mesg string) (*SignedMessage, error) {
+	api := m.app.GetApi()
+	signed, err := api.SignMesg(from, auth, mesg)
+	if signed != nil {
+		return toSignedMessage(signed), err
+	}
+	return nil, err
+}
+
+func (m *MobileApp) EncryptAndSign(from, auth, mesg, to, pubKey string) (*SignedMessage, error) {
+	api := m.app.GetApi()
+	pKey, err := base64.StdEncoding.DecodeString(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := api.EncryptAndSign(from, auth, mesg, to, pKey)
+	if signed != nil {
+		return toSignedMessage(signed), err
+	}
+	return nil, err
+}
+
+func (m *MobileApp) EncryptMesg(fr, email, auth, mesg, to, pub string) (*SignedMessage, error) {
+	api := m.app.GetApi()
+	pKey, err := base64.StdEncoding.DecodeString(pub)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := api.EncryptMesg(fr, auth, mesg, to, pKey)
+	if signed != nil {
+		return toSignedMessage(signed), err
+	}
+	return nil, nil
+}
+
+func (m *MobileApp) DecryptMesg(addr, auth string, cipher []byte) (string, error) {
+	api := m.app.GetApi()
+	text, err := api.DecryptMesg(addr, auth, cipher)
+	if err != nil {
+		return text, err
+	}
+	return "", nil
 }

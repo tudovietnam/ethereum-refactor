@@ -230,7 +230,7 @@ type sendTx struct {
 
 func (stx *sendTx) setDefaults() error {
 	if stx.Gas == 0 {
-		stx.Gas = 100000
+		stx.Gas = 2000
 	}
 	if stx.GasPrice == nil {
 		stx.GasPrice = s_bigOne
