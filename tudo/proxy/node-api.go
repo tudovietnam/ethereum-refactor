@@ -325,7 +325,7 @@ func (api *TdNodeApi) seal(key *keystore.Key, mesg []byte) (*SignedMessage, erro
 	}, nil
 }
 
-func (api *TdNodeApi) EncryptAndSign(from, auth, mesg, to string,
+func (api *TdNodeApi) EncryptAndSign(from, auth, mesg string,
 	pubKey []byte) (*SignedMessage, error) {
 
 	key, err := api.getPrivKey(from, auth)
@@ -351,7 +351,7 @@ func (api *TdNodeApi) encryptData(pubKey, mesg []byte) ([]byte, error) {
 	return ecies.Encrypt(rand.Reader, encKey, mesg, nil, nil)
 }
 
-func (api *TdNodeApi) EncryptMesg(fr, auth, mesg, to string, pub []byte) (*SignedMessage, error) {
+func (api *TdNodeApi) EncryptMesg(mesg string, pub []byte) (*SignedMessage, error) {
 	cipherText, err := api.encryptData([]byte(pub), []byte(mesg))
 	if err != nil {
 		return nil, err
@@ -377,5 +377,6 @@ func (api *TdNodeApi) DecryptMesg(addr, auth string, cipher []byte) (string, err
 	if text != nil {
 		return string(text), nil
 	}
-	return "", nil
+	log.Error("Fail to decrypt", "key", key, "error", err)
+	return "", err
 }

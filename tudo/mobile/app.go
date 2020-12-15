@@ -4,14 +4,17 @@
 package mobile
 
 import (
+	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"math/big"
 	"os"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/tudo/kstore"
@@ -105,15 +108,15 @@ func NewMobileApp() *MobileApp {
 }
 
 func (m *MobileApp) Stop() {
-	m.Stop()
+	m.app.Stop()
 }
 
 func (m *MobileApp) Pause() {
-	m.Pause()
+	m.app.Pause()
 }
 
 func (m *MobileApp) Resume() {
-	m.Resume()
+	m.app.Resume()
 }
 
 func (m *MobileApp) MobileRun(base, level, config string) {
@@ -394,7 +397,7 @@ func (m *MobileApp) GetPublicKey(addr, auth string) (string, error) {
 func toSignedMessage(signed *proxy.SignedMessage) *SignedMessage {
 	return &SignedMessage{
 		Address:  base64.StdEncoding.EncodeToString(signed.Address),
-		MesgHash: string(signed.MesgHash),
+		MesgHash: signed.MesgHash,
 		RValue:   signed.RValue,
 		SValue:   signed.SValue,
 		MesgType: int(signed.MesgType),
@@ -412,26 +415,49 @@ func (m *MobileApp) SignMesg(from, auth, mesg string) (*SignedMessage, error) {
 	return nil, err
 }
 
-func (m *MobileApp) EncryptAndSign(from, auth, mesg, to, pubKey string) (*SignedMessage, error) {
+func (m *MobileApp) EncryptAndSign(from, auth, mesg, pubKey string) (*SignedMessage, error) {
 	api := m.app.GetApi()
 	pKey, err := base64.StdEncoding.DecodeString(pubKey)
 	if err != nil {
 		return nil, err
 	}
-	signed, err := api.EncryptAndSign(from, auth, mesg, to, pKey)
+	signed, err := api.EncryptAndSign(from, auth, mesg, pKey)
 	if signed != nil {
 		return toSignedMessage(signed), err
 	}
 	return nil, err
 }
 
-func (m *MobileApp) EncryptMesg(fr, email, auth, mesg, to, pub string) (*SignedMessage, error) {
+func (m *MobileApp) VerifySign(rVal, sVal, hashHex, pubKey string) (bool, error) {
+	pKey, err := base64.StdEncoding.DecodeString(pubKey)
+	if err != nil {
+		return false, err
+	}
+	hash := common.FromHex(hashHex)
+	publicKey, err := crypto.UnmarshalPubkey(pKey)
+	if err != nil {
+		return false, err
+	}
+	r := new(big.Int)
+	r, ok := r.SetString(rVal, 10)
+	if !ok {
+		return false, errors.New("Invalid rvalue")
+	}
+	s := new(big.Int)
+	s, ok = s.SetString(sVal, 10)
+	if !ok {
+		return false, errors.New("Invalid svalue")
+	}
+	return ecdsa.Verify(publicKey, hash, r, s), nil
+}
+
+func (m *MobileApp) EncryptMesg(mesg, pub string) (*SignedMessage, error) {
 	api := m.app.GetApi()
 	pKey, err := base64.StdEncoding.DecodeString(pub)
 	if err != nil {
 		return nil, err
 	}
-	signed, err := api.EncryptMesg(fr, auth, mesg, to, pKey)
+	signed, err := api.EncryptMesg(mesg, pKey)
 	if signed != nil {
 		return toSignedMessage(signed), err
 	}
@@ -441,8 +467,8 @@ func (m *MobileApp) EncryptMesg(fr, email, auth, mesg, to, pub string) (*SignedM
 func (m *MobileApp) DecryptMesg(addr, auth string, cipher []byte) (string, error) {
 	api := m.app.GetApi()
 	text, err := api.DecryptMesg(addr, auth, cipher)
-	if err != nil {
-		return text, err
+	if err == nil {
+		return text, nil
 	}
-	return "", nil
+	return "", err
 }

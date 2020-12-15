@@ -304,27 +304,41 @@ func signTx(api *TdNodeApi, from, to string, nonce, amt uint64) {
 }
 
 func encryptTests(t *testing.T) {
-	fmt.Println("Encrypt/decrypt test")
 	data := "This is the original text"
+
+	encryptWithAccount(t, gcAccountB, data)
+	encryptWithAccount(t, gcAccountA, data)
+	encryptWithAccount(t, gcAccountC, data)
+	encryptWithAccount(t, gcStockA, data)
+	encryptWithAccount(t, gcStockB, data)
+	encryptWithAccount(t, gcStockC, data)
+}
+
+func encryptWithAccount(t *testing.T, name, data string) {
+	fmt.Println("Encrypt/decrypt test using", name)
 	api := getApi()
 	assert := assert.New(t)
 
-	to := _accounts[gcAccountB]
+	to := _accounts[name]
 	pubKey, err := api.GetPublicKey(to, gcAuthStr)
 	verifyNoErr(assert, err, pubKey != nil, "Failed to get public key")
 
-	sign, err := api.EncryptMesg(_accounts[gcAccountA], gcAuthStr, data, to, pubKey)
+	sign, err := api.EncryptMesg(data, pubKey)
 	verifyNoErr(assert, err, sign != nil, "Failed to encrypt data")
 
-	if sign != nil {
-		decrypt, err := api.DecryptMesg(to, gcAuthStr, sign.Mesg)
-		verifyNoErr(assert, err, decrypt != "", "Failed to decrypt data")
-		assert.Equal(data, decrypt, "Must be the same as original")
+	decrypt, err := api.DecryptMesg(to, gcAuthStr, sign.Mesg)
+	verifyNoErr(assert, err, decrypt != "", "Failed to decrypt data")
+	assert.Equal(data, decrypt, "Must be the same as original")
 
-		fmt.Println("Encrypt hexdump")
-		fmt.Println(hex.Dump(sign.Mesg))
-		fmt.Println("Decode data:", decrypt)
-	}
+	fmt.Println("Encrypt hexdump")
+	fmt.Println(hex.Dump(sign.Mesg))
+	fmt.Println("Decode data:", decrypt)
+
+	sign, err = api.EncryptMesg(data, pubKey)
+	verifyNoErr(assert, err, sign != nil, "Failed to encrypt data")
+
+	decrypt, err = api.DecryptMesg(to, gcAuthStr, sign.Mesg)
+	assert.Equal(data, decrypt, "Must be the same as original")
 }
 
 /*

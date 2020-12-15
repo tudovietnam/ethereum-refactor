@@ -26,6 +26,7 @@ td:
 
 tdtest:
 	cd tudo/proxy && go test
+	cd tudo/mobile && go test
 
 android:
 	$(GORUN) build/ci.go aar --local
