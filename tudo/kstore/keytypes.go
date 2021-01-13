@@ -39,10 +39,10 @@ type TdStoreApi interface {
 	GetAccount(addr *accounts.Account) (*AccountEntry, error)
 	GetWalletEntry(addr *accounts.Account) (*WalletEntry, error)
 
-	CreateAccount(pub, priv, grp, contact, desc, auth string, chainId uint64) (*WalletEntry, error)
+	CreateAccount(pub, priv, grp, contact, desc, auth string, chainId uint64) (*AccountEntry, error)
 	UpdateAccount(addr *accounts.Account,
 		pub, priv, grp, contact, desc, oldAuth, newAuth string) (*AccountEntry, error)
-	Import(json []byte, auth string, chainId uint64) (*WalletEntry, error)
+	Import(json []byte, auth string, chainId uint64) (*AccountEntry, error)
 	GetAllAccounts() ([]AccountEntry, error)
 	GetAddressBook() ([]WalletEntry, error)
 	OpenAccount(addr *accounts.Account, auth string) (*keystore.Key, error)

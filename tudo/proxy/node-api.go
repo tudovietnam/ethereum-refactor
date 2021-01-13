@@ -171,7 +171,7 @@ func (api *TdNodeApi) PayToRelayNonce(from, to, auth string,
 // CreateAccount creates a new account.
 //
 func (api *TdNodeApi) CreateAccount(pubName, privName,
-	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
+	groupName, contact, desc, auth string) (*kstore.AccountEntry, error) {
 
 	log.Info("Create account", "privName", privName, "pubName", pubName)
 	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, api.chainId)
@@ -180,7 +180,7 @@ func (api *TdNodeApi) CreateAccount(pubName, privName,
 // CreateStock creates a new account with stock contract.
 //
 func (api *TdNodeApi) CreateStock(pubName, privName,
-	groupName, contact, desc, auth string) (*kstore.WalletEntry, error) {
+	groupName, contact, desc, auth string) (*kstore.AccountEntry, error) {
 
 	log.Info("Create stock account", "privName", privName, "pubName", pubName)
 	return api.kstore.CreateAccount(pubName, privName, groupName, contact, desc, auth, api.stockId)
@@ -203,7 +203,7 @@ func (api *TdNodeApi) UpdateAccount(address, pubName, privName,
 // ImportAccount imports external account.
 //
 func (api *TdNodeApi) ImportAccount(pKey, pubName, privName,
-	groupName, contact, desc, auth string, chainId uint64) (*kstore.WalletEntry, error) {
+	groupName, contact, desc, auth string, chainId uint64) (*kstore.AccountEntry, error) {
 
 	privKey, err := crypto.HexToECDSA(pKey)
 	if err != nil {

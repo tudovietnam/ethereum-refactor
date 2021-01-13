@@ -177,8 +177,6 @@ func fromWalletEntry(w *kstore.WalletEntry) *AccountEntry {
 		PrivateName: w.PrivateName,
 		ContactInfo: w.ContactInfo,
 		Description: w.Description,
-		Balance:     0,
-		Nonce:       0,
 	}
 }
 
@@ -196,6 +194,7 @@ func fromAccountEntry(a *kstore.AccountEntry) *AccountEntry {
 }
 
 // GetAddressBook returns all addressbook entries.
+
 //
 func (m *MobileApp) GetAddressBook(out *AccountEntryArr) {
 	api := m.app.GetApi()
@@ -216,7 +215,7 @@ func (m *MobileApp) CreatAccount(pub, priv, gr, ct, desc, auth string) (*Account
 	if err != nil {
 		return nil, err
 	}
-	return fromWalletEntry(entry), nil
+	return fromAccountEntry(entry), nil
 }
 
 func (m *MobileApp) CreatStock(pub, priv, gr, ct, desc, auth string) (*AccountEntry, error) {
@@ -225,7 +224,7 @@ func (m *MobileApp) CreatStock(pub, priv, gr, ct, desc, auth string) (*AccountEn
 	if err != nil {
 		return nil, err
 	}
-	return fromWalletEntry(entry), nil
+	return fromAccountEntry(entry), nil
 }
 
 func (m *MobileApp) NewWalletEntry(addr, g, pub, priv, ct, d string) (*AccountEntry, error) {
@@ -266,7 +265,7 @@ func (m *MobileApp) ImportAccount(pkey string,
 	if err != nil {
 		return nil, err
 	}
-	return fromWalletEntry(entry), nil
+	return fromAccountEntry(entry), nil
 }
 
 // ImportPrivateKey imports private key to existing account in the wallet.
@@ -277,7 +276,7 @@ func (m *MobileApp) ImportPrivateKey(pkey, auth string, chainId int64) (*Account
 	if err != nil {
 		return nil, err
 	}
-	return fromWalletEntry(entry), nil
+	return fromAccountEntry(entry), nil
 }
 
 // fromPrivKey converts private key to string form.

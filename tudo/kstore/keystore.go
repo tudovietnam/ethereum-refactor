@@ -309,7 +309,7 @@ func (store *TdStore) newKey(rand io.Reader) (*keystore.Key, error) {
 }
 
 func (store *TdStore) CreateAccount(pub, priv, group, contact, desc, auth string,
-	chainId uint64) (*WalletEntry, error) {
+	chainId uint64) (*AccountEntry, error) {
 	key, err := store.newKey(crand.Reader)
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func importPrivateKey(keyHex []byte, auth string) (*keystore.Key, error) {
 	return &key, err
 }
 
-func (store *TdStore) Import(json []byte, auth string, chainId uint64) (*WalletEntry, error) {
+func (store *TdStore) Import(json []byte, auth string, chainId uint64) (*AccountEntry, error) {
 	key, err := importPrivateKey(json, auth)
 	if err != nil || key.PrivateKey == nil {
 		return nil, errors.New("Invalid json key")
@@ -369,7 +369,7 @@ func (store *TdStore) Import(json []byte, auth string, chainId uint64) (*WalletE
 }
 
 func (store *TdStore) ImportAccount(privKey *ecdsa.PrivateKey,
-	pub, priv, group, contact, desc, auth string, chainId uint64) (*WalletEntry, error) {
+	pub, priv, group, contact, desc, auth string, chainId uint64) (*AccountEntry, error) {
 	address := crypto.PubkeyToAddress(privKey.PublicKey)
 
 	store.Lock.Lock()
@@ -423,7 +423,7 @@ func (store *TdStore) ImportAccount(privKey *ecdsa.PrivateKey,
 	if err := account.saveRec(store.acctDir); err != nil {
 		return nil, err
 	}
-	return &account.WalletEntry, nil
+	return account, nil
 }
 
 func (store *TdStore) GetAllAccounts() ([]AccountEntry, error) {
@@ -808,9 +808,11 @@ func (ae *AccountEntry) Print(skipHdr bool) {
 ID.............. %s
 Public key...... %s
 Private key..... %s
+ChainId......... %d
 `,
 			k.Id.String(), hex.EncodeToString(k.Address[:]),
-			hex.EncodeToString(crypto.FromECDSA(k.PrivateKey)))
+			hex.EncodeToString(crypto.FromECDSA(k.PrivateKey)),
+			ae.ChainId)
 	}
 	fmt.Println("--------------------------------------------------------")
 }
